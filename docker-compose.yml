@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: faceattend-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: faceattend
+      POSTGRES_USER: usain
+      POSTGRES_PASSWORD: usain
+    ports:
+      - "5432:5432"
+    volumes:
+      - faceattend_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  faceattend_postgres_data:
