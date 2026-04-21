@@ -1,0 +1,107 @@
+
+/home/usain/Bureau/FaceAttend/mobile-app/App.tsx
+   1:27  error  'useEffect' is defined but never used     @typescript-eslint/no-unused-vars
+  21:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  25:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  51:14  error  'error' is defined but never used         @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/App.tsx
+  23:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  29:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  47:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/components/StudentLayout.tsx
+  17:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  25:3   error  'student' is defined but never used       @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/lib/api.ts
+  24:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:60  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  35:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  40:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  45:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  50:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  55:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  60:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  75:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  89:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  97:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/pages/Alerts.tsx
+  26:14  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Attendance.tsx
+    6:3   error  'Plus' is defined but never used              @typescript-eslint/no-unused-vars
+   10:3   error  'ShieldCheck' is defined but never used       @typescript-eslint/no-unused-vars
+   17:3   error  'Zap' is defined but never used               @typescript-eslint/no-unused-vars
+   40:10  error  'loading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   97:47  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  145:18  error  'createTeacher' is defined but never used     @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/ClassroomCamera.tsx
+  141:14  error    'e' is defined but never used                                                                                        @typescript-eslint/no-unused-vars
+  157:6   warning  React Hook useEffect has a missing dependency: 'selectedDeviceId'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  192:15  error    Unexpected lexical declaration in case block                                                                         no-case-declarations
+  295:63  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/pages/Courses.tsx
+  11:3   error  'GraduationCap' is defined but never used  @typescript-eslint/no-unused-vars
+  72:14  error  'e' is defined but never used              @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Dashboard.tsx
+  36:6   warning  React Hook useEffect has a missing dependency: 'fetchDashboard'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  48:14  error    'e' is defined but never used                                                                                      @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Login.tsx
+  59:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Reports.tsx
+    3:10  error  'BarChart3' is defined but never used                   @typescript-eslint/no-unused-vars
+    3:57  error  'ChevronDown' is defined but never used                 @typescript-eslint/no-unused-vars
+    3:70  error  'FileText' is defined but never used                    @typescript-eslint/no-unused-vars
+   35:10  error  'selectedCourse' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   35:26  error  'setSelectedCourse' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   37:10  error  'courses' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  166:13  error  Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  185:50  error  Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  204:27  error  Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  204:56  error  Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  257:30  error  Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/pages/StudentDashboard.tsx
+   4:3  error  'TrendingUp' is defined but never used       @typescript-eslint/no-unused-vars
+   9:3  error  'Clock' is defined but never used            @typescript-eslint/no-unused-vars
+  10:3  error  'ShieldCheck' is defined but never used      @typescript-eslint/no-unused-vars
+  11:3  error  'Calendar' is defined but never used         @typescript-eslint/no-unused-vars
+  15:3  error  'GraduationCap' is defined but never used    @typescript-eslint/no-unused-vars
+  17:3  error  'LayoutDashboard' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/StudentLogin.tsx
+   5:3   error  'ShieldCheck' is defined but never used   @typescript-eslint/no-unused-vars
+  16:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  54:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/pages/Students.tsx
+  142:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  167:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/TeacherDashboard.tsx
+    8:3   error  'WifiOff' is defined but never used               @typescript-eslint/no-unused-vars
+   14:3   error  'CheckCircle2' is defined but never used          @typescript-eslint/no-unused-vars
+   21:3   error  'MonitorPlay' is defined but never used           @typescript-eslint/no-unused-vars
+  151:9   error  'handleLogin' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  211:17  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  254:14  error  'err' is defined but never used                   @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Teachers.tsx
+   79:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   88:32  error  'id' is defined but never used            @typescript-eslint/no-unused-vars
+  113:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/utils/logger.ts
+  25:12  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 70 problems (68 errors, 2 warnings)
+

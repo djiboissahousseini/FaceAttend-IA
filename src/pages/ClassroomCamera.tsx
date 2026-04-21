@@ -138,7 +138,7 @@ export default function ClassroomCamera() {
           handleResult('unknown', { message: 'VISAGE INCONNU' });
         }
       }
-    } catch (e) {
+    } catch (_e) {
       handleResult(targetType === 'teacher' ? 'teacher_error' : 'error', {
         message: 'ERREUR RÉSEAU',
       });
@@ -188,7 +188,7 @@ export default function ClassroomCamera() {
               window.location.reload();
               break;
 
-            case 'FORCE_START_SESSION':
+            case 'FORCE_START_SESSION': {
               const fetchSessionToForce = async () => {
                 try {
                   const res = await fetch(`${API}/api/sessions`);
@@ -209,6 +209,7 @@ export default function ClassroomCamera() {
               };
               fetchSessionToForce();
               break;
+            }
           }
         } catch (err) {
           console.error('Invalid command format', err);
@@ -249,8 +250,8 @@ export default function ClassroomCamera() {
             setStatus('standby');
           }
         }
-      } catch (e) {
-        console.error('Erreur de détection', e);
+      } catch (_e) {
+        console.error('Erreur de détection');
       }
     };
     checkActiveSession();
@@ -292,7 +293,10 @@ export default function ClassroomCamera() {
 
   const playSound = (type: 'success' | 'error' | 'warning') => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AudioContextClass();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 

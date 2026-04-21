@@ -1,0 +1,94 @@
+
+> vite-react-typescript-starter@0.0.0 lint
+> eslint .
+
+
+/home/usain/Bureau/FaceAttend/mobile-app/App.tsx
+  1:27  error  'useEffect' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/components/StudentLayout.tsx
+  17:12  error  Unexpected any. Specify a different type                                   @typescript-eslint/no-explicit-any
+  25:3   error  'student' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  66:90  error  Insert `⏎················`                                                 prettier/prettier
+  67:1   error  Delete `··`                                                                prettier/prettier
+  70:61  error  Insert `⏎··················`                                               prettier/prettier
+  71:1   error  Delete `··`                                                                prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/lib/api.ts
+  24:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:60  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  35:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  40:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  45:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  50:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  55:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  60:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  75:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  89:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  97:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/usain/Bureau/FaceAttend/src/pages/Alerts.tsx
+  26:14  error  'e' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Attendance.tsx
+    6:3    error  'Plus' is defined but never used. Allowed unused vars must match /^_/u              @typescript-eslint/no-unused-vars
+   10:3    error  'ShieldCheck' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+   17:3    error  'Zap' is defined but never used. Allowed unused vars must match /^_/u               @typescript-eslint/no-unused-vars
+   40:10   error  'loading' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+   97:47   error  Unexpected any. Specify a different type                                            @typescript-eslint/no-explicit-any
+  145:18   error  'createTeacher' is defined but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars
+  448:88   error  Insert `⏎··················`                                                        prettier/prettier
+  451:1    error  Delete `··`                                                                         prettier/prettier
+  538:112  error  Insert `⏎··························`                                                prettier/prettier
+  541:1    error  Delete `··`                                                                         prettier/prettier
+  547:112  error  Insert `⏎··························`                                                prettier/prettier
+  550:1    error  Delete `··`                                                                         prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/ClassroomCamera.tsx
+  141:14   error    'e' is defined but never used. Allowed unused caught errors must match /^_/u                                         @typescript-eslint/no-unused-vars
+  157:6    warning  React Hook useEffect has a missing dependency: 'selectedDeviceId'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  192:15   error    Unexpected lexical declaration in case block                                                                         no-case-declarations
+  295:63   error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+  500:125  error    Insert `⏎······················`                                                                                     prettier/prettier
+  505:1    error    Delete `··`                                                                                                          prettier/prettier
+  563:84   error    Insert `⏎··························`                                                                                 prettier/prettier
+  566:1    error    Delete `··`                                                                                                          prettier/prettier
+  609:101  error    Insert `⏎··························`                                                                                 prettier/prettier
+  614:1    error    Delete `··`                                                                                                          prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/Courses.tsx
+  11:3   error  'GraduationCap' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  72:14  error  'e' is defined but never used. Allowed unused caught errors must match /^_/u     @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Reports.tsx
+  69:46  error  Insert `⏎··········`                                                                                                                                                                                                                                 prettier/prettier
+  70:1   error  Insert `··`                                                                                                                                                                                                                                          prettier/prettier
+  71:11  error  Insert `··`                                                                                                                                                                                                                                          prettier/prettier
+  72:1   error  Replace `········}` with `··········}⏎········`                                                                                                                                                                                                      prettier/prettier
+  73:46  error  Replace `(r:·{·status:·string·})·=>·r.status·===·'present'` with `⏎··········(r:·{·status:·string·})·=>·r.status·===·'present'⏎········`                                                                                                             prettier/prettier
+  74:45  error  Replace `(r:·{·status:·string·})·=>·r.status·===·'absent'` with `⏎··········(r:·{·status:·string·})·=>·r.status·===·'absent'⏎········`                                                                                                               prettier/prettier
+  94:23  error  Replace `·full_name?:·string;·photo_url?:·string;·student_code?:·string;·group_name?:·string` with `⏎············full_name?:·string;⏎············photo_url?:·string;⏎············student_code?:·string;⏎············group_name?:·string;⏎·········`  prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/StudentDashboard.tsx
+   4:3  error  'TrendingUp' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+   9:3  error  'Clock' is defined but never used. Allowed unused vars must match /^_/u            @typescript-eslint/no-unused-vars
+  10:3  error  'ShieldCheck' is defined but never used. Allowed unused vars must match /^_/u      @typescript-eslint/no-unused-vars
+  11:3  error  'Calendar' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  15:3  error  'GraduationCap' is defined but never used. Allowed unused vars must match /^_/u    @typescript-eslint/no-unused-vars
+  17:3  error  'LayoutDashboard' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/StudentLogin.tsx
+  3:9  error  Replace `⏎··Mail,⏎··Zap,⏎··ArrowRight,⏎··GraduationCap,⏎··Fingerprint,⏎··Eye,⏎··EyeOff,⏎` with `·Mail,·Zap,·ArrowRight,·GraduationCap,·Fingerprint,·Eye,·EyeOff·`  prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/TeacherDashboard.tsx
+    8:3  error  'WifiOff' is defined but never used. Allowed unused vars must match /^_/u               @typescript-eslint/no-unused-vars
+   14:3  error  'CheckCircle2' is defined but never used. Allowed unused vars must match /^_/u          @typescript-eslint/no-unused-vars
+  150:9  error  'handleLogin' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/Teachers.tsx
+  89:32  error  'id' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 62 problems (61 errors, 1 warning)
+  24 errors and 0 warnings potentially fixable with the `--fix` option.
+

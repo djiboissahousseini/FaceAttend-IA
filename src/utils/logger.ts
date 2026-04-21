@@ -22,7 +22,7 @@ async function sendToBackend(message: string, level: string, source: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, level, source }),
     });
-  } catch (e) {
+  } catch (_e) {
     // Fail silently to avoid infinite loops
   }
 }

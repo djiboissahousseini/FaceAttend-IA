@@ -1,0 +1,22 @@
+
+> vite-react-typescript-starter@0.0.0 lint
+> eslint .
+
+
+/home/usain/Bureau/FaceAttend/src/components/StudentLayout.tsx
+  17:12  error  Unexpected any. Specify a different type                                   @typescript-eslint/no-explicit-any
+  25:3   error  'student' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/usain/Bureau/FaceAttend/src/pages/ClassroomCamera.tsx
+  157:6   warning  React Hook useEffect has a missing dependency: 'selectedDeviceId'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  296:32  error    Replace `·window.AudioContext·||` with `⏎········window.AudioContext·||⏎·······`                                     prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/Courses.tsx
+  2:9  error  Replace `⏎··Search,⏎··Plus,⏎··BookOpen,⏎··Clock,⏎··MapPin,⏎··Users,⏎··X,⏎··ChevronDown,⏎` with `·Search,·Plus,·BookOpen,·Clock,·MapPin,·Users,·X,·ChevronDown·`  prettier/prettier
+
+/home/usain/Bureau/FaceAttend/src/pages/TeacherDashboard.tsx
+  146:1  error  Delete `⏎⏎`  prettier/prettier
+
+✖ 6 problems (5 errors, 1 warning)
+  3 errors and 0 warnings potentially fixable with the `--fix` option.
+

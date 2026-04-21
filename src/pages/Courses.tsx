@@ -1,15 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Search,
-  Plus,
-  BookOpen,
-  Clock,
-  MapPin,
-  Users,
-  X,
-  ChevronDown,
-  GraduationCap,
-} from 'lucide-react';
+import { Search, Plus, BookOpen, Clock, MapPin, Users, X, ChevronDown } from 'lucide-react';
 import { Course, Department, Teacher } from '../types';
 
 const API = 'http://localhost:8000';
@@ -21,7 +11,6 @@ export default function Courses() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [enrollCounts, setEnrollCounts] = useState<Record<string, number>>({});
   const [form, setForm] = useState({
     course_code: '',
     name: '',
@@ -47,30 +36,16 @@ export default function Courses() {
     setLoading(true);
     setError(null);
     try {
-      const [coursesRes, deptsRes, countsRes, teachersRes] = await Promise.all([
-        fetch(`${API}/api/courses`).then(async (r) => {
-          if (!r.ok) throw new Error('Erreur API');
-          return r.json();
-        }),
-        fetch(`${API}/api/departments`).then(async (r) => {
-          if (!r.ok) throw new Error('Erreur API');
-          return r.json();
-        }),
-        fetch(`${API}/api/enrollments/counts`).then(async (r) => {
-          if (!r.ok) throw new Error('Erreur API');
-          return r.json();
-        }),
-        fetch(`${API}/api/teachers`).then(async (r) => {
-          if (!r.ok) throw new Error('Erreur API');
-          return r.json();
-        }),
+      const [coursesRes, deptsRes, teachersRes] = await Promise.all([
+        fetch(`${API}/api/courses`).then((r) => r.json()),
+        fetch(`${API}/api/departments`).then((r) => r.json()),
+        fetch(`${API}/api/teachers`).then((r) => r.json()),
       ]);
       setCourses(coursesRes ?? []);
       setDepartments(deptsRes ?? []);
-      setEnrollCounts(countsRes ?? {});
       setTeachers(teachersRes ?? []);
-    } catch (e) {
-      setError('Impossible de charger les cours ou départements.');
+    } catch (_e) {
+      setError('Impossible de charger les données.');
     } finally {
       setLoading(false);
     }

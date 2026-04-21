@@ -21,43 +21,43 @@ export async function checkHealth(): Promise<{ status: string; database: string 
 
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats() {
-  const data = await apiFetch<{ stats: any; recentRecords: any[] }>('/api/dashboard');
+  const data = await apiFetch<{ stats: unknown; recentRecords: unknown[] }>('/api/dashboard');
   return data.stats;
 }
 
 // ─── Courses ─────────────────────────────────────────────────────────────────
 export async function getCourses() {
-  return apiFetch<any[]>('/api/courses');
+  return apiFetch<unknown[]>('/api/courses');
 }
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
 export async function getSessions() {
-  return apiFetch<any[]>('/api/sessions');
+  return apiFetch<unknown[]>('/api/sessions');
 }
 
 // ─── Teachers ────────────────────────────────────────────────────────────────
 export async function getTeachers() {
-  return apiFetch<any[]>('/api/teachers');
+  return apiFetch<unknown[]>('/api/teachers');
 }
 
 // ─── Students ────────────────────────────────────────────────────────────────
 export async function getStudents() {
-  return apiFetch<any[]>('/api/students');
+  return apiFetch<unknown[]>('/api/students');
 }
 
 // ─── Departments ─────────────────────────────────────────────────────────────
 export async function getDepartments() {
-  return apiFetch<any[]>('/api/departments');
+  return apiFetch<unknown[]>('/api/departments');
 }
 
 // ─── Alerts ──────────────────────────────────────────────────────────────────
 export async function getAlerts() {
-  return apiFetch<any[]>('/api/alerts');
+  return apiFetch<unknown[]>('/api/alerts');
 }
 
 // ─── Attendance Records for a session ────────────────────────────────────────
 export async function getSessionRecords(sessionId: string) {
-  return apiFetch<any[]>(`/api/sessions/${sessionId}/records`);
+  return apiFetch<unknown[]>(`/api/sessions/${sessionId}/records`);
 }
 
 // ─── File Upload ──────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export async function uploadFile(file: File): Promise<string> {
 
 // ─── Face Recognition ────────────────────────────────────────────────────────
 export async function recognizeFace(sessionId: string | number, imageBase64: string) {
-  return apiFetch<any>(`/api/sessions/${sessionId}/recognize`, {
+  return apiFetch<unknown>(`/api/sessions/${sessionId}/recognize`, {
     method: 'POST',
     body: JSON.stringify({ image: imageBase64 }),
   });
@@ -86,7 +86,7 @@ export async function upsertRecord(payload: {
   method: string;
   confidence_score?: number | null;
 }) {
-  return apiFetch<any>('/api/records/upsert', {
+  return apiFetch<unknown>('/api/records/upsert', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -94,7 +94,7 @@ export async function upsertRecord(payload: {
 
 // ─── Create Teacher ───────────────────────────────────────────────────────────
 export async function createTeacher(payload: { name: string; email: string; photo_url?: string }) {
-  return apiFetch<any>('/api/teachers', {
+  return apiFetch<unknown>('/api/teachers', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

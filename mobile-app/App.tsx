@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,14 +16,34 @@ import {
 // Remplacez par l'IP de votre PC (ex: http://192.168.1.15:8000)
 const API_BASE_URL = 'http://localhost:8000';
 
+interface Student {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+interface AttendanceRecord {
+  id: string;
+  course_name?: string;
+  marked_at: string;
+  status: 'present' | 'absent' | 'late';
+}
+
+interface AttendanceAlert {
+  id: string;
+  course_name: string;
+  absence_count: number;
+  threshold: number;
+}
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [student, setStudent] = useState<any>(null);
+  const [student, setStudent] = useState<Student | null>(null);
   const [email, setEmail] = useState('');
   const [studentCode, setStudentCode] = useState('');
 
-  const [records, setRecords] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [alerts, setAlerts] = useState<AttendanceAlert[]>([]);
   const [loading, setLoading] = useState(false);
 
   // --- LOGIQUE DE CONNEXION ---
@@ -48,7 +68,7 @@ export default function App() {
       } else {
         Alert.alert('Échec', data.detail || 'Identifiants incorrects');
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Erreur', 'Impossible de contacter le serveur FaceAttend');
     } finally {
       setLoading(false);
@@ -63,8 +83,8 @@ export default function App() {
 
       setRecords(await resRecords.json());
       setAlerts(await resAlerts.json());
-    } catch (e) {
-      console.error(e);
+    } catch (_error) {
+      console.error('Erreur lors de la récupération des données');
     }
   };
 

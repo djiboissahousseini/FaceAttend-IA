@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 const API = 'http://localhost:8000';
-import { BarChart3, TrendingUp, TrendingDown, Download, ChevronDown, FileText } from 'lucide-react';
+import { TrendingUp, TrendingDown, Download } from 'lucide-react';
 import { Course } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -32,9 +32,7 @@ export default function Reports() {
   const [courseStats, setCourseStats] = useState<CourseStats[]>([]);
   const [studentStats, setStudentStats] = useState<StudentStats[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState('');
   const [filterGroup, setFilterGroup] = useState('ALL');
-  const [courses, setCourses] = useState<Course[]>([]);
   const [view, setView] = useState<'courses' | 'students'>('courses');
 
   useEffect(() => {
@@ -52,7 +50,6 @@ export default function Reports() {
       ]);
 
       const courseList = (coursesRes ?? []) as Course[];
-      setCourses(courseList);
 
       const sessions = sessionsRes ?? [];
       const records = recordsRes ?? [];
@@ -69,13 +66,19 @@ export default function Reports() {
       });
 
       const stats: CourseStats[] = courseList.map((c) => {
-        const courseRecords = records.filter((r) => {
-          const session = r.attendance_sessions as { course_id?: string } | null;
-          return session?.course_id === c.id;
-        });
-        const present = courseRecords.filter((r) => r.status === 'present').length;
-        const absent = courseRecords.filter((r) => r.status === 'absent').length;
-        const late = courseRecords.filter((r) => r.status === 'late').length;
+        const courseRecords = records.filter(
+          (r: { attendance_sessions?: { course_id?: string } }) => {
+            const session = r.attendance_sessions;
+            return session?.course_id === c.id;
+          }
+        );
+        const present = courseRecords.filter(
+          (r: { status: string }) => r.status === 'present'
+        ).length;
+        const absent = courseRecords.filter(
+          (r: { status: string }) => r.status === 'absent'
+        ).length;
+        const late = courseRecords.filter((r: { status: string }) => r.status === 'late').length;
         const total = courseRecords.length;
         return {
           course: c,
@@ -94,7 +97,12 @@ export default function Reports() {
         (r: {
           student_id: string;
           status: string;
-          students?: { full_name?: string; photo_url?: string; student_code?: string };
+          students?: {
+            full_name?: string;
+            photo_url?: string;
+            student_code?: string;
+            group_name?: string;
+          };
         }) => {
           if (!r.student_id) return;
           if (!studentMap[r.student_id]) {
@@ -124,8 +132,8 @@ export default function Reports() {
         }))
         .sort((a, b) => a.rate - b.rate);
       setStudentStats(sList);
-    } catch (e) {
-      console.error('Erreur fetchData:', e);
+    } catch (_e) {
+      console.error('Erreur fetchData');
     } finally {
       setLoading(false);
     }
@@ -162,8 +170,17 @@ export default function Reports() {
       // Fetch alerts to build "Liste Rouge"
       const res = await fetch(`${API}/api/alerts`);
       const alertsData = res.ok ? await res.json() : [];
-      const criticalAlerts = alertsData.filter(
-        (a: any) => a.status === 'active' || a.absence_count >= a.threshold
+
+      interface CriticalAlert {
+        status: string;
+        absence_count: number;
+        threshold: number;
+        students?: { full_name?: string; student_code?: string };
+        courses?: { name?: string };
+      }
+
+      const criticalAlerts = (alertsData as CriticalAlert[]).filter(
+        (a) => a.status === 'active' || a.absence_count >= a.threshold
       );
 
       // Title
@@ -182,7 +199,7 @@ export default function Reports() {
         doc.text("LISTE ROUGE - ALERTES D'ABSENTEISME", 14, 48);
         doc.setTextColor(0, 0, 0);
 
-        const alertRows = criticalAlerts.map((a: any) => [
+        const alertRows = criticalAlerts.map((a) => [
           a.students?.full_name || 'Inconnu',
           a.students?.student_code || 'N/A',
           a.courses?.name || 'N/A',
@@ -201,7 +218,8 @@ export default function Reports() {
       }
 
       // Section 2: Bilan par Cours
-      let nextY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 15 : 48;
+      const docWithTable = doc as unknown as { lastAutoTable: { finalY: number } };
+      let nextY = docWithTable.lastAutoTable ? docWithTable.lastAutoTable.finalY + 15 : 48;
       if (nextY > 250) {
         doc.addPage();
         nextY = 20;
@@ -254,7 +272,7 @@ export default function Reports() {
       });
 
       // Signatures
-      const finalY = (doc as any).lastAutoTable.finalY + 30;
+      const finalY = docWithTable.lastAutoTable.finalY + 30;
       if (finalY < 270) {
         doc.setFontSize(10);
         doc.text("Signature de l'Administration :", 20, finalY);
@@ -263,8 +281,8 @@ export default function Reports() {
 
       // Save
       doc.save(`rapport_assiduite_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (e) {
-      console.error('Erreur lors de la generation du PDF', e);
+    } catch (_e) {
+      console.error('Erreur lors de la generation du PDF');
       alert('Erreur lors de la génération du rapport PDF.');
     }
   };

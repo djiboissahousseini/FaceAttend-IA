@@ -1,20 +1,14 @@
 import React, { useEffect, useState } from 'react';
 const API = 'http://localhost:8000';
 import {
-  TrendingUp,
   BookOpen,
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Clock,
-  ShieldCheck,
-  Calendar,
   History,
   User,
   Cpu,
-  GraduationCap,
   LogOut,
-  LayoutDashboard,
   ScanFace,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
@@ -460,12 +454,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   };
 
   return (
-    <StudentLayout
-      student={student}
-      onLogout={onLogout}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-    >
+    <StudentLayout onLogout={onLogout} activeTab={activeTab} setActiveTab={setActiveTab}>
       <div className="max-w-md mx-auto pb-20 px-4">{renderContent()}</div>
     </StudentLayout>
   );

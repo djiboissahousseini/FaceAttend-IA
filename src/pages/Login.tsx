@@ -56,7 +56,7 @@ export default function Login({ onLogin, forceRole }: LoginProps) {
           setLoading(false);
         }
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Erreur de connexion au serveur.');
       setLoading(false);
     }

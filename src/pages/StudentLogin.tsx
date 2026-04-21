@@ -1,19 +1,10 @@
 import React, { useState, useEffect } from 'react';
 const API = 'http://localhost:8000';
-import {
-  Mail,
-  ShieldCheck,
-  Zap,
-  ArrowRight,
-  GraduationCap,
-  Fingerprint,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
+import { Mail, Zap, ArrowRight, GraduationCap, Fingerprint, Eye, EyeOff } from 'lucide-react';
 import { logger } from '../utils/logger';
 
 interface StudentLoginProps {
-  onLogin: (student: any) => void;
+  onLogin: (student: unknown) => void;
 }
 
 export default function StudentLogin({ onLogin }: StudentLoginProps) {
@@ -51,9 +42,10 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
       logger.info(`Connexion réussie pour l'étudiant ID: ${student.id}`, 'STUDENT_PORTAL');
       localStorage.setItem('faceattend_student', JSON.stringify(student));
       onLogin(student);
-    } catch (err: any) {
-      logger.error(`Échec de connexion (${email}): ${err.message}`, 'STUDENT_PORTAL');
-      setError(err.message);
+    } catch (_err) {
+      const errorMessage = (_err as Error).message || 'Erreur de connexion';
+      logger.error(`Échec de connexion (${email}): ${errorMessage}`, 'STUDENT_PORTAL');
+      setError(errorMessage);
       setLoading(false);
     }
   };

@@ -76,8 +76,9 @@ export default function Teachers() {
       setEditingId(null);
       setForm({ name: '', email: '', password: '', photo_url: '' });
       fetchTeachers();
-    } catch (err: any) {
-      setSaveError(err.message);
+    } catch (_err) {
+      const errorMessage = (_err as Error).message || "Erreur lors de l'enregistrement";
+      setSaveError(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -85,7 +86,7 @@ export default function Teachers() {
 
   // Note: Il n'y a pas d'endpoint DELETE /api/teachers dans le backend actuel
   // Je vais ajouter un message d'information ou omettre la fonction si non supportée
-  async function deleteTeacher(id: number) {
+  async function deleteTeacher(_id: number) {
     alert("La suppression des enseignants n'est pas encore implémentée dans le backend.");
     setDeletingId(null);
   }
@@ -110,7 +111,7 @@ export default function Teachers() {
 
       const data = await res.json();
       setForm({ ...form, photo_url: data.url });
-    } catch (err) {
+    } catch (_err) {
       setSaveError("Impossible d'uploader la photo. Vérifiez que le backend est lancé.");
     } finally {
       setUploading(false);

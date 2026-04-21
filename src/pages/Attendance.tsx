@@ -3,18 +3,15 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
-  Plus,
   AlertTriangle,
   MonitorPlay,
   ExternalLink,
-  ShieldCheck,
   Video,
   Unlock,
   PowerOff,
   RefreshCw,
   PlayCircle,
   CalendarClock,
-  Zap,
   XCircle,
 } from 'lucide-react';
 import { Session, Student, Teacher } from '../types';
@@ -37,10 +34,8 @@ export default function Attendance() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionAttendanceResponse | null>(null);
-  const [loading, setLoading] = useState(true);
 
   // Forms
-  const [teacherForm, setTeacherForm] = useState({ name: '', email: '', photo_url: '' });
   const [sessionForm, setSessionForm] = useState({
     teacher_id: '',
     course_name: '',
@@ -60,7 +55,7 @@ export default function Attendance() {
   const [selectedAnticipateSession, setSelectedAnticipateSession] = useState('');
 
   useEffect(() => {
-    Promise.all([fetchTeachers(), fetchSessions()]).finally(() => setLoading(false));
+    Promise.all([fetchTeachers(), fetchSessions()]);
   }, []);
 
   useEffect(() => {
@@ -94,7 +89,7 @@ export default function Attendance() {
   }, [activeClassroom, sessions]);
 
   // Command Sender
-  const sendCommand = (cmd: string, payload?: any) => {
+  const sendCommand = (cmd: string, payload?: unknown) => {
     const commandData = {
       command: cmd,
       payload: payload,
@@ -116,8 +111,8 @@ export default function Attendance() {
       const res = await fetch(`${API}/api/teachers`);
       const data = await res.json();
       setTeachers(data ?? []);
-    } catch (e) {
-      console.error(e);
+    } catch (_e) {
+      console.error('Erreur lors de la récupération des enseignants');
     }
   }
 
@@ -126,8 +121,8 @@ export default function Attendance() {
       const res = await fetch(`${API}/api/sessions`);
       const data = await res.json();
       setSessions(data ?? []);
-    } catch (e) {
-      console.error(e);
+    } catch (_e) {
+      console.error('Erreur lors de la récupération des sessions');
     }
   }
 
@@ -137,20 +132,9 @@ export default function Attendance() {
       const res = await fetch(`${API}/api/sessions/${sessionId}/attendance`);
       const data = await res.json();
       setSessionDetails(data);
-    } catch (e) {
-      console.error(e);
+    } catch (_e) {
+      console.error('Erreur lors du chargement de la session');
     }
-  }
-
-  async function createTeacher() {
-    if (!teacherForm.name || !teacherForm.email) return;
-    await fetch(`${API}/api/teachers`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(teacherForm),
-    });
-    setTeacherForm({ name: '', email: '', photo_url: '' });
-    fetchTeachers();
   }
 
   async function createSession() {

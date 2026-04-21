@@ -23,7 +23,7 @@ export default function Alerts() {
       if (!res.ok) throw new Error('Erreur API');
       const data = await res.json();
       setAlerts(data ?? []);
-    } catch (e) {
+    } catch (_e) {
       setError('Impossible de charger les alertes.');
     } finally {
       setLoading(false);

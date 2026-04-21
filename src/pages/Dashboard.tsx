@@ -33,6 +33,7 @@ export default function Dashboard() {
     fetchDashboard();
     const interval = setInterval(fetchLogs, 5000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchDashboard() {
@@ -45,7 +46,7 @@ export default function Dashboard() {
       setStats(data.stats ?? stats);
       setRecentRecords(data.recentRecords ?? []);
       fetchLogs();
-    } catch (e) {
+    } catch (_e) {
       setError('Impossible de charger les statistiques.');
     } finally {
       setLoading(false);
@@ -59,8 +60,8 @@ export default function Dashboard() {
         const data = await res.json();
         setLogs(data);
       }
-    } catch (e) {
-      console.error('Log fetch error', e);
+    } catch (_e) {
+      console.error('Log fetch error');
     }
   }
 

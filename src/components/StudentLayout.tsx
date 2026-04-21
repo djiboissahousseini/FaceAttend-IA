@@ -14,7 +14,6 @@ import {
 
 interface StudentLayoutProps {
   children: ReactNode;
-  student: any;
   onLogout: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -22,7 +21,6 @@ interface StudentLayoutProps {
 
 export default function StudentLayout({
   children,
-  student,
   onLogout,
   activeTab,
   setActiveTab,

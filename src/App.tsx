@@ -20,13 +20,13 @@ function App() {
     return localStorage.getItem('faceattend_auth') === 'true';
   });
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | null>(() => {
-    return (localStorage.getItem('faceattend_role') as any) || null;
+    return (localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null) || null;
   });
   const [currentPage, setCurrentPage] = useState<Page>(() => {
     const role = localStorage.getItem('faceattend_role');
     return role === 'teacher' ? 'teacher' : 'dashboard';
   });
-  const [studentUser, setStudentUser] = useState<any>(() => {
+  const [studentUser, setStudentUser] = useState<unknown>(() => {
     const saved = localStorage.getItem('faceattend_student');
     return saved ? JSON.parse(saved) : null;
   });
@@ -42,9 +42,9 @@ function App() {
 
   const handleLogin = (authenticated: boolean) => {
     if (authenticated) {
-      const savedRole = localStorage.getItem('faceattend_role') as Page;
+      const savedRole = localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null;
       setIsAuthenticated(true);
-      setUserRole(savedRole as any);
+      setUserRole(savedRole);
       setCurrentPage(savedRole === 'teacher' ? 'teacher' : 'dashboard');
     } else {
       setIsAuthenticated(false);

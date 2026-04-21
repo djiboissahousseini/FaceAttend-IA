@@ -139,7 +139,7 @@ export default function Students() {
         const errorText = await res.text();
         alert(`Erreur serveur (${res.status}): ${errorText}`);
       }
-    } catch (err) {
+    } catch (_err) {
       alert("Erreur de connexion au backend. Vérifiez qu'il est lancé sur le port 8000.");
     }
   }
@@ -164,7 +164,7 @@ export default function Students() {
 
       const data = await res.json();
       setForm({ ...form, photo_url: data.url });
-    } catch (err) {
+    } catch (_err) {
       setSaveError("Impossible d'uploader la photo. Vérifiez que le backend est lancé.");
     } finally {
       setUploading(false);

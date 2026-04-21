@@ -3,22 +3,17 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen,
   Calendar,
-  Users,
-  TrendingUp,
-  WifiOff,
   RefreshCw,
   Server,
   Database,
   Clock,
   Zap,
-  CheckCircle2,
   AlertCircle,
   Activity,
   GraduationCap,
   Unlock,
   LogOut,
   ShieldCheck,
-  MonitorPlay,
   X,
   ShieldAlert,
   Key,
@@ -148,12 +143,6 @@ export default function TeacherDashboard() {
     }
   }, [loggedInTeacher]);
 
-  const handleLogin = () => {
-    // Cette fonction n'est plus utilisée car le login passe par Login.tsx
-    // Mais on la garde au cas où pour la redirection
-    window.location.href = '/';
-  };
-
   const handleLogout = () => {
     const role = localStorage.getItem('faceattend_role');
 
@@ -208,9 +197,8 @@ export default function TeacherDashboard() {
       setStats(dashboardStats);
       setAllCourses(courseData);
       setAllSessions(sessionData);
-    } catch (e: any) {
+    } catch (_e) {
       setError('Impossible de charger les données. Assurez-vous que le backend est démarré.');
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -251,7 +239,7 @@ export default function TeacherDashboard() {
       } else {
         alert('Identifiants incorrects ou compte bloqué.');
       }
-    } catch (err) {
+    } catch (_err) {
       alert('Erreur de connexion au serveur.');
     } finally {
       setAuthLoading(false);
