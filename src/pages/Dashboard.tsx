@@ -60,7 +60,7 @@ export default function Dashboard() {
         setLogs(data);
       }
     } catch (e) {
-      console.error("Log fetch error", e);
+      console.error('Log fetch error', e);
     }
   }
 
@@ -192,11 +192,13 @@ export default function Dashboard() {
         <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
           <div className="flex items-center gap-2">
             <div className="flex gap-1.5 mr-2">
-               <div className="w-3 h-3 rounded-full bg-red-500/50" />
-               <div className="w-3 h-3 rounded-full bg-amber-500/50" />
-               <div className="w-3 h-3 rounded-full bg-emerald-500/50" />
+              <div className="w-3 h-3 rounded-full bg-red-500/50" />
+              <div className="w-3 h-3 rounded-full bg-amber-500/50" />
+              <div className="w-3 h-3 rounded-full bg-emerald-500/50" />
             </div>
-            <h3 className="text-white text-xs font-bold uppercase tracking-widest font-mono">Backend System Logs</h3>
+            <h3 className="text-white text-xs font-bold uppercase tracking-widest font-mono">
+              Backend System Logs
+            </h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -204,27 +206,35 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-800">
-           <div className="p-4 space-y-2">
-              <p className="text-slate-500 text-[10px] font-bold uppercase mb-2">Access Logs (STDOUT)</p>
-              <pre className="text-emerald-400/80 text-[10px] font-mono leading-relaxed h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
-                {logs.logs || "En attente de données..."}
-              </pre>
-           </div>
-           <div className="p-4 space-y-2 bg-black/20">
-              <p className="text-red-500/80 text-[10px] font-bold uppercase mb-2">Error Logs (STDERR)</p>
-              <pre className="text-red-400 text-[10px] font-mono leading-relaxed h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
-                {logs.errors || "Aucune erreur détectée."}
-              </pre>
-           </div>
+          <div className="p-4 space-y-2">
+            <p className="text-slate-500 text-[10px] font-bold uppercase mb-2">
+              Access Logs (STDOUT)
+            </p>
+            <pre className="text-emerald-400/80 text-[10px] font-mono leading-relaxed h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+              {logs.logs || 'En attente de données...'}
+            </pre>
+          </div>
+          <div className="p-4 space-y-2 bg-black/20">
+            <p className="text-red-500/80 text-[10px] font-bold uppercase mb-2">
+              Error Logs (STDERR)
+            </p>
+            <pre className="text-red-400 text-[10px] font-mono leading-relaxed h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+              {logs.errors || 'Aucune erreur détectée.'}
+            </pre>
+          </div>
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      `}} />
+      `,
+        }}
+      />
     </div>
   );
 }

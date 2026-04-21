@@ -1,5 +1,16 @@
 import { useEffect, useState, useRef } from 'react';
-import { Search, Plus, UserCheck, UserX, X, Upload, ChevronDown, Camera, Loader2, Trash2 } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  UserCheck,
+  UserX,
+  X,
+  Upload,
+  ChevronDown,
+  Camera,
+  Loader2,
+  Trash2,
+} from 'lucide-react';
 import { Student, Department } from '../types';
 
 const API = 'http://localhost:8000';
@@ -53,7 +64,7 @@ export default function Students() {
     return matchSearch && matchDept && matchGroup;
   });
 
-  const groups = ['ALL', ...new Set(students.map(s => s.group_name).filter(Boolean))].sort();
+  const groups = ['ALL', ...new Set(students.map((s) => s.group_name).filter(Boolean))].sort();
 
   function handleEdit(student: Student) {
     setForm({
@@ -73,26 +84,34 @@ export default function Students() {
     if (!form.full_name || !form.email || !form.student_code) return;
     setSaving(true);
     setSaveError(null);
-    
+
     const url = editingId ? `${API}/api/students/${editingId}` : `${API}/api/students`;
     const method = editingId ? 'PATCH' : 'POST';
-    
+
     const res = await fetch(url, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, department_id: form.department_id || null }),
     });
-    
+
     setSaving(false);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       setSaveError(`Erreur: ${err.detail ?? res.statusText}`);
       return;
     }
-    
+
     setShowModal(false);
     setEditingId(null);
-    setForm({ student_code: '', full_name: '', email: '', department_id: '', group_name: '', photo_url: '', enrolled_at: new Date().toISOString().split('T')[0] });
+    setForm({
+      student_code: '',
+      full_name: '',
+      email: '',
+      department_id: '',
+      group_name: '',
+      photo_url: '',
+      enrolled_at: new Date().toISOString().split('T')[0],
+    });
     fetchData();
   }
 
@@ -107,10 +126,10 @@ export default function Students() {
 
   async function deleteStudent(id: string, name: string) {
     try {
-      console.log("Envoi de la requête DELETE pour:", name);
+      console.log('Envoi de la requête DELETE pour:', name);
       const res = await fetch(`${API}/api/students/${id}`, {
         method: 'DELETE',
-        headers: { 'Accept': 'application/json' }
+        headers: { Accept: 'application/json' },
       });
 
       if (res.ok) {
@@ -285,9 +304,7 @@ export default function Students() {
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden lg:table-cell">
-                      <span className="text-slate-600 text-sm">
-                        {student.group_name ?? '—'}
-                      </span>
+                      <span className="text-slate-600 text-sm">{student.group_name ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 hidden lg:table-cell">
                       <span className="text-slate-500 text-sm">
@@ -365,7 +382,7 @@ export default function Students() {
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h3 className="font-semibold text-slate-800">
-                {editingId ? 'Modifier l\'Étudiant' : 'Nouvel Étudiant'}
+                {editingId ? "Modifier l'Étudiant" : 'Nouvel Étudiant'}
               </h3>
               <button
                 onClick={() => {
@@ -432,9 +449,7 @@ export default function Students() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                  Groupe
-                </label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Groupe</label>
                 <input
                   type="text"
                   value={form.group_name}
@@ -444,15 +459,13 @@ export default function Students() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Photo de l'Étudiant</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Photo de l'Étudiant
+                </label>
                 <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-2xl">
                   {form.photo_url ? (
                     <div className="relative group overflow-hidden rounded-xl border-2 border-white shadow-sm">
-                      <img
-                        src={form.photo_url}
-                        alt="Preview"
-                        className="w-20 h-20 object-cover"
-                      />
+                      <img src={form.photo_url} alt="Preview" className="w-20 h-20 object-cover" />
                       <button
                         onClick={() => setForm({ ...form, photo_url: '' })}
                         className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -462,7 +475,11 @@ export default function Students() {
                     </div>
                   ) : (
                     <div className="w-20 h-20 bg-slate-100 rounded-xl flex items-center justify-center text-slate-300">
-                      {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
+                      {uploading ? (
+                        <Loader2 size={24} className="animate-spin" />
+                      ) : (
+                        <Camera size={24} />
+                      )}
                     </div>
                   )}
                   <div className="flex-1">
@@ -482,7 +499,11 @@ export default function Students() {
                       disabled={uploading}
                       className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
                     >
-                      {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                      {uploading ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Upload size={13} />
+                      )}
                       {form.photo_url ? 'Changer la photo' : 'Choisir une photo'}
                     </button>
                   </div>

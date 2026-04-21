@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, BookOpen, Clock, MapPin, Users, X, ChevronDown, GraduationCap } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  BookOpen,
+  Clock,
+  MapPin,
+  Users,
+  X,
+  ChevronDown,
+  GraduationCap,
+} from 'lucide-react';
 import { Course, Department, Teacher } from '../types';
 
 const API = 'http://localhost:8000';
@@ -221,7 +231,10 @@ export default function Courses() {
                       <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
                         <MapPin size={10} className="text-slate-500" />
                       </div>
-                      <span className="text-xs">{course.room} {course.group_name !== 'ALL' && `· Groupe ${course.group_name}`}</span>
+                      <span className="text-xs">
+                        {course.room}{' '}
+                        {course.group_name !== 'ALL' && `· Groupe ${course.group_name}`}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -403,9 +416,7 @@ export default function Courses() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                    Groupe
-                  </label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Groupe</label>
                   <select
                     value={form.group_name}
                     onChange={(e) => setForm({ ...form, group_name: e.target.value })}

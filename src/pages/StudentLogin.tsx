@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
 const API = 'http://localhost:8000';
-import { Mail, ShieldCheck, Zap, ArrowRight, GraduationCap, Fingerprint, Eye, EyeOff } from 'lucide-react';
+import {
+  Mail,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  GraduationCap,
+  Fingerprint,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { logger } from '../utils/logger';
 
 interface StudentLoginProps {
@@ -15,9 +24,8 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
 
   const [showCode, setShowCode] = useState(false);
 
-
   useEffect(() => {
-    document.title = "FaceAttend | Login Étudiant";
+    document.title = 'FaceAttend | Login Étudiant';
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +39,7 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
       const res = await fetch(`${API}/api/student/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, student_code: code })
+        body: JSON.stringify({ email, student_code: code }),
       });
 
       if (!res.ok) {
@@ -62,20 +70,26 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
     blob2: 'bg-blue-500/5',
     inputFocus: 'focus:ring-emerald-500/30 focus:border-emerald-500',
     iconColor: 'text-emerald-500',
-    gridLines: 'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
+    gridLines:
+      'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
     buttonText: 'text-slate-950',
     title: 'Portrait Étudiant',
     subtitle: 'Accès Portail Académique',
-    iconBg: 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+    iconBg: 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.15)]',
   };
 
   return (
-    <div className={`min-h-screen ${theme.container} flex items-center justify-center p-4 font-sans selection:bg-white/20 relative overflow-hidden`}>
-
+    <div
+      className={`min-h-screen ${theme.container} flex items-center justify-center p-4 font-sans selection:bg-white/20 relative overflow-hidden`}
+    >
       {/* ─── BACKGROUND EFFECTS ─── */}
       <div className="absolute inset-0 pointer-events-none transition-opacity duration-1000">
-        <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] ${theme.blob1} blur-[140px] rounded-full`} />
-        <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] ${theme.blob2} blur-[140px] rounded-full`} />
+        <div
+          className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] ${theme.blob1} blur-[140px] rounded-full`}
+        />
+        <div
+          className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] ${theme.blob2} blur-[140px] rounded-full`}
+        />
         <div
           className="absolute inset-0 transition-all duration-1000"
           style={{ backgroundImage: theme.gridLines, backgroundSize: '40px 40px', opacity: 0.3 }}
@@ -84,19 +98,24 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
 
       <div className="w-full max-w-md relative animate-in fade-in zoom-in-95 duration-700 ease-out z-10">
         {/* Glow behind card */}
-        <div className={`absolute -inset-1 bg-gradient-to-r ${theme.glowBg} rounded-[2rem] blur-lg opacity-20`}></div>
+        <div
+          className={`absolute -inset-1 bg-gradient-to-r ${theme.glowBg} rounded-[2rem] blur-lg opacity-20`}
+        ></div>
 
         <div className={`relative ${theme.card} border rounded-3xl p-8`}>
-
           {/* ─── HEADER ─── */}
           <div className="flex flex-col items-center mb-8 animate-in slide-in-from-top-4 fade-in duration-700 delay-100 fill-mode-both">
-            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center border mb-5 transition-all duration-700 ${theme.iconBg}`}>
+            <div
+              className={`w-20 h-20 rounded-2xl flex items-center justify-center border mb-5 transition-all duration-700 ${theme.iconBg}`}
+            >
               <GraduationCap size={40} className={theme.iconColor} />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight text-center">
               {theme.title}
             </h1>
-            <p className="text-slate-400 text-sm mt-1.5 font-medium tracking-wide">{theme.subtitle}</p>
+            <p className="text-slate-400 text-sm mt-1.5 font-medium tracking-wide">
+              {theme.subtitle}
+            </p>
           </div>
 
           {/* ─── FORM ─── */}
@@ -106,7 +125,9 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
                 Email Professionnel
               </label>
               <div className="relative group">
-                <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:${theme.accentText} transition-colors duration-300`}>
+                <div
+                  className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:${theme.accentText} transition-colors duration-300`}
+                >
                   <Mail size={18} />
                 </div>
                 <input
@@ -125,11 +146,13 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
                 Code Étudiant (Matricule)
               </label>
               <div className="relative group">
-                <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:${theme.accentText} transition-colors duration-300`}>
+                <div
+                  className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:${theme.accentText} transition-colors duration-300`}
+                >
                   <Fingerprint size={18} />
                 </div>
                 <input
-                  type={showCode ? "text" : "password"}
+                  type={showCode ? 'text' : 'password'}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   className={`block w-full pl-11 pr-12 py-3.5 bg-black/40 border border-slate-700/50 text-white rounded-xl ${theme.inputFocus} transition-all duration-300 placeholder:text-slate-600 outline-none tracking-widest`}
@@ -160,7 +183,12 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
             >
               <span className="relative z-10 flex items-center gap-2 text-[15px] tracking-wide">
                 {loading ? 'Vérification...' : 'Authentification'}
-                {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
+                {!loading && (
+                  <ArrowRight
+                    size={18}
+                    className="group-hover:translate-x-1 transition-transform"
+                  />
+                )}
               </span>
               {/* Shine effect */}
               <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />

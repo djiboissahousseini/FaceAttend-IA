@@ -117,4 +117,13 @@ export interface DashboardStats {
   attendanceRate: number;
 }
 
-export type Page = 'dashboard' | 'teacher' | 'teachers' | 'students' | 'courses' | 'attendance' | 'classroom' | 'alerts' | 'reports';
+export type Page =
+  | 'dashboard'
+  | 'teacher'
+  | 'teachers'
+  | 'students'
+  | 'courses'
+  | 'attendance'
+  | 'classroom'
+  | 'alerts'
+  | 'reports';

@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   User,
-  Settings
+  Settings,
 } from 'lucide-react';
 
 interface StudentLayoutProps {
@@ -38,7 +38,6 @@ export default function StudentLayout({
 
   return (
     <div className="flex flex-col h-screen bg-[#020617] overflow-hidden font-sans text-white">
-
       {/* ─── MAIN CONTENT AREA ─── */}
       <main className="flex-1 overflow-y-auto pb-24 pt-4 px-4">
         {/* Header with menu button */}
@@ -54,9 +53,7 @@ export default function StudentLayout({
             <Menu size={22} />
           </button>
         </div>
-        <div className="max-w-md mx-auto">
-          {children}
-        </div>
+        <div className="max-w-md mx-auto">{children}</div>
       </main>
 
       {/* ─── BOTTOM NAVIGATION (Mobile Tabs) ─── */}
@@ -66,11 +63,15 @@ export default function StudentLayout({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === item.id ? 'text-emerald-400' : 'text-slate-500'
-                }`}
+              className={`flex flex-col items-center gap-1 transition-all duration-300 ${
+                activeTab === item.id ? 'text-emerald-400' : 'text-slate-500'
+              }`}
             >
-              <div className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'bg-emerald-500/10 scale-110' : ''
-                }`}>
+              <div
+                className={`p-2 rounded-xl transition-all ${
+                  activeTab === item.id ? 'bg-emerald-500/10 scale-110' : ''
+                }`}
+              >
                 {item.icon}
               </div>
               <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
@@ -104,7 +105,9 @@ export default function StudentLayout({
 
             <div className="space-y-6">
               <div className="space-y-4">
-                <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em] pl-1">Configuration</p>
+                <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em] pl-1">
+                  Configuration
+                </p>
                 <button className="w-full flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/5 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
                   <Settings size={20} />
                   <span className="text-sm font-bold">Paramètres</span>
@@ -127,8 +130,12 @@ export default function StudentLayout({
             </div>
 
             <div className="absolute bottom-8 left-8 right-8 text-center">
-              <p className="text-[10px] text-slate-700 font-bold uppercase tracking-[0.2em]">FaceAttend Connect v2.4</p>
-              <p className="text-[8px] text-slate-800 font-bold uppercase mt-1">Design Mobile Prototype</p>
+              <p className="text-[10px] text-slate-700 font-bold uppercase tracking-[0.2em]">
+                FaceAttend Connect v2.4
+              </p>
+              <p className="text-[8px] text-slate-800 font-bold uppercase mt-1">
+                Design Mobile Prototype
+              </p>
             </div>
           </div>
         </div>

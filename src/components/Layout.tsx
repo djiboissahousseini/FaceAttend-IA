@@ -48,7 +48,6 @@ export default function Layout({
   const userJson = localStorage.getItem('faceattend_user');
   const user = userJson ? JSON.parse(userJson) : null;
 
-
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {sidebarOpen && (
@@ -110,8 +109,10 @@ export default function Layout({
 
         <div className="px-4 py-4 border-t border-slate-700/50">
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${userRole === 'admin' ? 'bg-blue-500' : 'bg-purple-500'}`}>
-              {userRole === 'admin' ? 'AD' : (user?.name?.substring(0, 2).toUpperCase() || 'PR')}
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${userRole === 'admin' ? 'bg-blue-500' : 'bg-purple-500'}`}
+            >
+              {userRole === 'admin' ? 'AD' : user?.name?.substring(0, 2).toUpperCase() || 'PR'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-white text-xs font-medium truncate">
@@ -122,7 +123,7 @@ export default function Layout({
               </p>
             </div>
             {onLogout && (
-              <button 
+              <button
                 onClick={onLogout}
                 className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                 title="Déconnexion"

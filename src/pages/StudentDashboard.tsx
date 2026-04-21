@@ -15,7 +15,7 @@ import {
   GraduationCap,
   LogOut,
   LayoutDashboard,
-  ScanFace
+  ScanFace,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
 
@@ -49,9 +49,8 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-
   useEffect(() => {
-    document.title = "FaceAttend | Étudiant";
+    document.title = 'FaceAttend | Étudiant';
 
     if (simulatedStudentId) {
       fetchStats(simulatedStudentId);
@@ -71,7 +70,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
 
         return () => clearInterval(interval);
       } catch (e) {
-        console.error("Parse error", e);
+        console.error('Parse error', e);
         localStorage.removeItem('faceattend_student');
         window.location.href = '/portal';
       }
@@ -98,13 +97,13 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           const mappedStudent = {
             ...data.student,
             // Le backend retourne déjà photo_url — on le garde tel quel
-            photo_url: data.student.photo_url || data.student.photo || null
+            photo_url: data.student.photo_url || data.student.photo || null,
           };
-          setStudent(prev => ({ ...prev, ...mappedStudent }));
+          setStudent((prev) => ({ ...prev, ...mappedStudent }));
         }
       }
     } catch (e) {
-      console.error("Sync Error:", e);
+      console.error('Sync Error:', e);
     } finally {
       setLoading(false);
     }
@@ -130,12 +129,18 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
         </div>
         <div className="ml-6 space-y-1">
           <div className="space-y-0">
-            <h2 className="text-white font-black text-[17px] uppercase tracking-tighter leading-tight">Université Belhadj Bouchaïb</h2>
-            <h3 className="text-slate-400 font-bold text-[13px] uppercase tracking-wider leading-none">Aïn Témouchent</h3>
+            <h2 className="text-white font-black text-[17px] uppercase tracking-tighter leading-tight">
+              Université Belhadj Bouchaïb
+            </h2>
+            <h3 className="text-slate-400 font-bold text-[13px] uppercase tracking-wider leading-none">
+              Aïn Témouchent
+            </h3>
           </div>
           <div className="flex items-center gap-2.5 pt-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,1)] animate-pulse" />
-            <p className="text-emerald-400 text-[11px] font-black uppercase tracking-[0.3em]">Informatique</p>
+            <p className="text-emerald-400 text-[11px] font-black uppercase tracking-[0.3em]">
+              Informatique
+            </p>
           </div>
         </div>
       </div>
@@ -156,18 +161,30 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             <div className="relative w-72 h-72 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border border-slate-800/50 scale-[1.15]" />
               <div className="absolute inset-0 rounded-full border border-dashed border-slate-700/50 scale-[1.05] animate-[spin_60s_linear_infinite]" />
-              
+
               <svg className="w-full h-full -rotate-90 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                <circle cx="144" cy="144" r="126" className="stroke-slate-900 fill-transparent" strokeWidth="14" />
                 <circle
-                  cx="144" cy="144" r="126" className="fill-transparent transition-all duration-2000 ease-out stroke-emerald-500"
-                  strokeWidth="14" strokeDasharray="792"
+                  cx="144"
+                  cy="144"
+                  r="126"
+                  className="stroke-slate-900 fill-transparent"
+                  strokeWidth="14"
+                />
+                <circle
+                  cx="144"
+                  cy="144"
+                  r="126"
+                  className="fill-transparent transition-all duration-2000 ease-out stroke-emerald-500"
+                  strokeWidth="14"
+                  strokeDasharray="792"
                   strokeDashoffset={792 - (792 * (stats?.attendance_rate || 0)) / 100}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center mt-2">
-                <p className="text-[12px] text-emerald-400/80 font-black uppercase tracking-[0.5em] mb-1">Assiduité</p>
+                <p className="text-[12px] text-emerald-400/80 font-black uppercase tracking-[0.5em] mb-1">
+                  Assiduité
+                </p>
                 <span className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 tracking-tighter drop-shadow-lg">
                   {stats?.attendance_rate}%
                 </span>
@@ -181,14 +198,18 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                   <CheckCircle2 size={16} />
                 </div>
                 <p className="text-4xl font-black text-white">{stats?.total_presences}</p>
-                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">Présences</p>
+                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">
+                  Présences
+                </p>
               </div>
               <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:bg-slate-900/80 hover:border-red-500/20 group">
                 <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 mb-1 group-hover:scale-110 transition-transform">
                   <XCircle size={16} />
                 </div>
                 <p className="text-4xl font-black text-slate-300">{stats?.total_absences}</p>
-                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">Absences</p>
+                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">
+                  Absences
+                </p>
               </div>
             </div>
           </div>
@@ -203,12 +224,16 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               <div className="flex items-center gap-4 bg-black/40 px-6 py-2.5 rounded-full border border-white/5">
                 <div className="flex items-center gap-2">
                   <ScanFace size={14} className="text-emerald-500" />
-                  <span className="text-[12px] font-black text-emerald-400 uppercase tracking-[0.3em]">{student?.code}</span>
+                  <span className="text-[12px] font-black text-emerald-400 uppercase tracking-[0.3em]">
+                    {student?.code}
+                  </span>
                 </div>
                 <div className="w-[1px] h-4 bg-white/20" />
                 <div className="flex items-center gap-2">
                   <User size={14} className="text-slate-400" />
-                  <span className="text-[12px] font-black text-slate-300 uppercase tracking-[0.3em]">G{student?.group?.replace(/\D/g, '') || '2'}</span>
+                  <span className="text-[12px] font-black text-slate-300 uppercase tracking-[0.3em]">
+                    G{student?.group?.replace(/\D/g, '') || '2'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -224,20 +249,36 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">Mes Modules</h3>
-              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">Suivi de présence expert</p>
+              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+                Mes Modules
+              </h3>
+              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+                Suivi de présence expert
+              </p>
             </div>
             <BookOpen className="text-emerald-500/20 mb-1" size={32} />
           </div>
           <div className="space-y-4 px-2">
             {stats?.modules.map((m, i) => {
-              const rate = m.presences + m.absences > 0 ? Math.round((m.presences / (m.presences + m.absences)) * 100) : 100;
+              const rate =
+                m.presences + m.absences > 0
+                  ? Math.round((m.presences / (m.presences + m.absences)) * 100)
+                  : 100;
               const isWarning = rate < 80;
               return (
-                <div key={i} className={`bg-slate-900/60 backdrop-blur-xl border ${isWarning ? 'border-red-500/20' : 'border-white/5 hover:border-emerald-500/20'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 group`}>
+                <div
+                  key={i}
+                  className={`bg-slate-900/60 backdrop-blur-xl border ${isWarning ? 'border-red-500/20' : 'border-white/5 hover:border-emerald-500/20'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 group`}
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-black text-white uppercase tracking-tight truncate max-w-[180px]">{m.name}</span>
-                    <span className={`text-2xl font-black ${isWarning ? 'text-red-400 drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]'}`}>{rate}%</span>
+                    <span className="text-sm font-black text-white uppercase tracking-tight truncate max-w-[180px]">
+                      {m.name}
+                    </span>
+                    <span
+                      className={`text-2xl font-black ${isWarning ? 'text-red-400 drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]'}`}
+                    >
+                      {rate}%
+                    </span>
                   </div>
                   <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden border border-white/5 relative">
                     <div className="absolute inset-0 bg-slate-800/50 w-full" />
@@ -249,8 +290,15 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 pt-1">
-                    <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-500/70" /> {m.presences} Présences</span>
-                    <span className={`flex items-center gap-1.5 ${isWarning ? 'text-red-400 animate-pulse' : 'text-slate-500'}`}><AlertTriangle size={12} /> Seuil: {m.threshold}</span>
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 size={12} className="text-emerald-500/70" /> {m.presences}{' '}
+                      Présences
+                    </span>
+                    <span
+                      className={`flex items-center gap-1.5 ${isWarning ? 'text-red-400 animate-pulse' : 'text-slate-500'}`}
+                    >
+                      <AlertTriangle size={12} /> Seuil: {m.threshold}
+                    </span>
                   </div>
                 </div>
               );
@@ -267,8 +315,12 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">Historique Scans</h3>
-              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">Journal de bord sécurisé</p>
+              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+                Historique Scans
+              </h3>
+              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+                Journal de bord sécurisé
+              </p>
             </div>
             <History className="text-emerald-500/20 mb-1" size={32} />
           </div>
@@ -276,19 +328,40 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             {stats?.history.map((h, i) => {
               const isPresent = h.status === 'present';
               return (
-                <div key={i} className={`bg-slate-900/40 border-l-4 ${isPresent ? 'border-l-emerald-500' : 'border-l-red-500'} border-y border-r border-white/5 p-4 rounded-2xl flex items-center justify-between transition-all hover:bg-slate-900/60 hover:scale-[1.01]`}>
+                <div
+                  key={i}
+                  className={`bg-slate-900/40 border-l-4 ${isPresent ? 'border-l-emerald-500' : 'border-l-red-500'} border-y border-r border-white/5 p-4 rounded-2xl flex items-center justify-between transition-all hover:bg-slate-900/60 hover:scale-[1.01]`}
+                >
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isPresent ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${isPresent ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                    >
                       {isPresent ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[13px] font-black text-white uppercase tracking-tight truncate max-w-[150px]">{h.course_name}</p>
-                      <p className={`text-[9px] font-black uppercase tracking-[0.2em] ${isPresent ? 'text-emerald-500/70' : 'text-red-500/70'}`}>{isPresent ? 'Présence validée' : 'Absence marquée'}</p>
+                      <p className="text-[13px] font-black text-white uppercase tracking-tight truncate max-w-[150px]">
+                        {h.course_name}
+                      </p>
+                      <p
+                        className={`text-[9px] font-black uppercase tracking-[0.2em] ${isPresent ? 'text-emerald-500/70' : 'text-red-500/70'}`}
+                      >
+                        {isPresent ? 'Présence validée' : 'Absence marquée'}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-tight">{new Date(h.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
-                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{new Date(h.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-tight">
+                      {new Date(h.date).toLocaleDateString('fr-FR', {
+                        day: '2-digit',
+                        month: 'short',
+                      })}
+                    </p>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                      {new Date(h.date).toLocaleTimeString('fr-FR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
                   </div>
                 </div>
               );
@@ -305,37 +378,66 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-8 flex flex-col items-center gap-5 text-center mx-2 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full -mr-10 -mt-10 pointer-events-none" />
-            
+
             <div className="relative">
               <div className="absolute -inset-3 bg-emerald-500/20 rounded-full blur-xl opacity-40 animate-pulse" />
               <div className="absolute inset-0 rounded-full border-2 border-emerald-500/30 scale-110 animate-[spin_10s_linear_infinite] border-t-emerald-500 border-r-transparent" />
               <div className="relative w-28 h-28 rounded-full border border-emerald-500/50 p-1 bg-slate-950 z-10 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
                 <img
-                  src={student?.photo_url ? (student.photo_url.startsWith('http') ? student.photo_url : `${API}${student.photo_url}`) : `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name || '')}&background=10b981&color=000`}
+                  src={
+                    student?.photo_url
+                      ? student.photo_url.startsWith('http')
+                        ? student.photo_url
+                        : `${API}${student.photo_url}`
+                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name || '')}&background=10b981&color=000`
+                  }
                   className="w-full h-full object-cover rounded-full"
                   alt="Profile"
                 />
               </div>
             </div>
             <div className="space-y-1 z-10">
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none">{student?.name}</h2>
-              <p className="text-emerald-500 text-[11px] font-black uppercase tracking-[0.4em]">{student?.code}</p>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none">
+                {student?.name}
+              </h2>
+              <p className="text-emerald-500 text-[11px] font-black uppercase tracking-[0.4em]">
+                {student?.code}
+              </p>
             </div>
           </div>
 
           <div className="grid gap-3 px-2">
             {[
-              { icon: <User size={20} />, label: 'Email Académique', value: student?.email || 'N/A' },
-              { icon: <BookOpen size={20} />, label: 'Filière / Département', value: student?.filiere || 'Informatique' },
-              { icon: <Cpu size={20} />, label: 'Groupe d\'Étude', value: student?.group || 'Groupe 2' },
+              {
+                icon: <User size={20} />,
+                label: 'Email Académique',
+                value: student?.email || 'N/A',
+              },
+              {
+                icon: <BookOpen size={20} />,
+                label: 'Filière / Département',
+                value: student?.filiere || 'Informatique',
+              },
+              {
+                icon: <Cpu size={20} />,
+                label: "Groupe d'Étude",
+                value: student?.group || 'Groupe 2',
+              },
             ].map((item, idx) => (
-              <div key={idx} className="bg-slate-900/30 p-5 rounded-[1.5rem] border border-white/5 flex items-center gap-5 transition-all hover:bg-slate-900/60 hover:border-emerald-500/20 group">
+              <div
+                key={idx}
+                className="bg-slate-900/30 p-5 rounded-[1.5rem] border border-white/5 flex items-center gap-5 transition-all hover:bg-slate-900/60 hover:border-emerald-500/20 group"
+              >
                 <div className="w-12 h-12 rounded-[1rem] bg-emerald-500/5 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/10 transition-all">
                   {item.icon}
                 </div>
                 <div className="text-left flex-1">
-                  <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em]">{item.label}</p>
-                  <p className="text-[13px] font-black text-white uppercase mt-0.5 tracking-tight truncate">{item.value}</p>
+                  <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em]">
+                    {item.label}
+                  </p>
+                  <p className="text-[13px] font-black text-white uppercase mt-0.5 tracking-tight truncate">
+                    {item.value}
+                  </p>
                 </div>
               </div>
             ))}
@@ -364,9 +466,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
       activeTab={activeTab}
       setActiveTab={setActiveTab}
     >
-      <div className="max-w-md mx-auto pb-20 px-4">
-        {renderContent()}
-      </div>
+      <div className="max-w-md mx-auto pb-20 px-4">{renderContent()}</div>
     </StudentLayout>
   );
 }

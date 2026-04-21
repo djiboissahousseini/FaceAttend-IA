@@ -33,15 +33,16 @@ export default function Teachers() {
       const data = await res.json();
       setTeachers(data ?? []);
     } catch (err) {
-      console.error("Erreur lors de la récupération des enseignants:", err);
+      console.error('Erreur lors de la récupération des enseignants:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  const filtered = teachers.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.email.toLowerCase().includes(search.toLowerCase())
+  const filtered = teachers.filter(
+    (t) =>
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.email.toLowerCase().includes(search.toLowerCase())
   );
 
   function handleEdit(teacher: Teacher) {
@@ -85,8 +86,8 @@ export default function Teachers() {
   // Note: Il n'y a pas d'endpoint DELETE /api/teachers dans le backend actuel
   // Je vais ajouter un message d'information ou omettre la fonction si non supportée
   async function deleteTeacher(id: number) {
-     alert("La suppression des enseignants n'est pas encore implémentée dans le backend.");
-     setDeletingId(null);
+    alert("La suppression des enseignants n'est pas encore implémentée dans le backend.");
+    setDeletingId(null);
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -199,20 +200,20 @@ export default function Teachers() {
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-2">
                         {deletingId === teacher.id ? (
-                           <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => deleteTeacher(teacher.id)}
-                                className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                              >
-                                Confirmer
-                              </button>
-                              <button 
-                                onClick={() => setDeletingId(null)}
-                                className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded hover:bg-slate-300"
-                              >
-                                Annuler
-                              </button>
-                           </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => deleteTeacher(teacher.id)}
+                              className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                            >
+                              Confirmer
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(null)}
+                              className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded hover:bg-slate-300"
+                            >
+                              Annuler
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => setDeletingId(teacher.id)}
@@ -244,9 +245,13 @@ export default function Teachers() {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20">
             <div className="flex items-center justify-between px-6 py-5 bg-slate-900 text-white">
               <div>
-                <h3 className="font-bold text-lg">{editingId ? 'Modifier Enseignant' : 'Nouvel Enseignant'}</h3>
+                <h3 className="font-bold text-lg">
+                  {editingId ? 'Modifier Enseignant' : 'Nouvel Enseignant'}
+                </h3>
                 <p className="text-slate-400 text-xs">
-                  {editingId ? 'Mettre à jour les informations et la photo' : 'Ajouter un membre au corps enseignant'}
+                  {editingId
+                    ? 'Mettre à jour les informations et la photo'
+                    : 'Ajouter un membre au corps enseignant'}
                 </p>
               </div>
               <button
@@ -260,7 +265,7 @@ export default function Teachers() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-6">
               <div className="space-y-4">
                 <div>
@@ -308,11 +313,7 @@ export default function Teachers() {
                 <div className="flex items-center gap-5 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-3xl">
                   {form.photo_url ? (
                     <div className="relative group overflow-hidden rounded-2xl border-4 border-white shadow-md">
-                      <img
-                        src={form.photo_url}
-                        alt="Preview"
-                        className="w-24 h-24 object-cover"
-                      />
+                      <img src={form.photo_url} alt="Preview" className="w-24 h-24 object-cover" />
                       <button
                         onClick={() => setForm({ ...form, photo_url: '' })}
                         className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -322,12 +323,17 @@ export default function Teachers() {
                     </div>
                   ) : (
                     <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center text-slate-300 shadow-sm border border-slate-100">
-                      {uploading ? <Loader2 size={32} className="animate-spin text-blue-500" /> : <Camera size={32} />}
+                      {uploading ? (
+                        <Loader2 size={32} className="animate-spin text-blue-500" />
+                      ) : (
+                        <Camera size={32} />
+                      )}
                     </div>
                   )}
                   <div className="flex-1">
                     <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                      Utilisez une photo nette de face pour permettre l'authentification lors de l'ouverture des sessions.
+                      Utilisez une photo nette de face pour permettre l'authentification lors de
+                      l'ouverture des sessions.
                     </p>
                     <input
                       type="file"
@@ -342,7 +348,11 @@ export default function Teachers() {
                       disabled={uploading}
                       className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-all shadow-md active:scale-95 disabled:opacity-50"
                     >
-                      {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                      {uploading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Upload size={14} />
+                      )}
                       {form.photo_url ? 'Changer' : 'Téléverser'}
                     </button>
                   </div>

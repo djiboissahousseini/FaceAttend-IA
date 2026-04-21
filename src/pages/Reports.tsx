@@ -5,7 +5,6 @@ import { Course } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-
 interface CourseStats {
   course: Course;
   totalSessions: number;
@@ -46,10 +45,10 @@ export default function Reports() {
     setLoading(true);
     try {
       const [coursesRes, sessionsRes, recordsRes, enrollRes] = await Promise.all([
-        fetch(`${API}/api/courses`).then(r => r.json()),
-        fetch(`${API}/api/sessions`).then(r => r.json()),
-        fetch(`${API}/api/records`).then(r => r.json()),
-        fetch(`${API}/api/enrollments`).then(r => r.json()),
+        fetch(`${API}/api/courses`).then((r) => r.json()),
+        fetch(`${API}/api/sessions`).then((r) => r.json()),
+        fetch(`${API}/api/records`).then((r) => r.json()),
+        fetch(`${API}/api/enrollments`).then((r) => r.json()),
       ]);
 
       const courseList = (coursesRes ?? []) as Course[];
@@ -59,72 +58,72 @@ export default function Reports() {
       const records = recordsRes ?? [];
       const enrollments = enrollRes ?? [];
 
-    const sessionsByCourse: Record<string, number> = {};
-    sessions.forEach((s: { course_id: string }) => {
-      sessionsByCourse[s.course_id] = (sessionsByCourse[s.course_id] ?? 0) + 1;
-    });
-
-    const enrolledByCourse: Record<string, number> = {};
-    enrollments.forEach((e: { course_id: string }) => {
-      enrolledByCourse[e.course_id] = (enrolledByCourse[e.course_id] ?? 0) + 1;
-    });
-
-    const stats: CourseStats[] = courseList.map((c) => {
-      const courseRecords = records.filter((r) => {
-        const session = r.attendance_sessions as { course_id?: string } | null;
-        return session?.course_id === c.id;
+      const sessionsByCourse: Record<string, number> = {};
+      sessions.forEach((s: { course_id: string }) => {
+        sessionsByCourse[s.course_id] = (sessionsByCourse[s.course_id] ?? 0) + 1;
       });
-      const present = courseRecords.filter((r) => r.status === 'present').length;
-      const absent = courseRecords.filter((r) => r.status === 'absent').length;
-      const late = courseRecords.filter((r) => r.status === 'late').length;
-      const total = courseRecords.length;
-      return {
-        course: c,
-        totalSessions: sessionsByCourse[c.id] ?? 0,
-        totalEnrolled: enrolledByCourse[c.id] ?? 0,
-        presentCount: present,
-        absentCount: absent,
-        lateCount: late,
-        rate: total > 0 ? Math.round((present / total) * 100) : 0,
-      };
-    });
-    setCourseStats(stats);
 
-    const studentMap: Record<string, StudentStats> = {};
-    records.forEach(
-      (r: {
-        student_id: string;
-        status: string;
-        students?: { full_name?: string; photo_url?: string; student_code?: string };
-      }) => {
-        if (!r.student_id) return;
-        if (!studentMap[r.student_id]) {
-          studentMap[r.student_id] = {
-            student_id: r.student_id,
-            full_name: r.students?.full_name ?? '',
-            photo_url: r.students?.photo_url ?? '',
-            student_code: r.students?.student_code ?? '',
-            present: 0,
-            absent: 0,
-            late: 0,
-            total: 0,
-            rate: 0,
-            group_name: r.students?.group_name ?? '',
-          };
+      const enrolledByCourse: Record<string, number> = {};
+      enrollments.forEach((e: { course_id: string }) => {
+        enrolledByCourse[e.course_id] = (enrolledByCourse[e.course_id] ?? 0) + 1;
+      });
+
+      const stats: CourseStats[] = courseList.map((c) => {
+        const courseRecords = records.filter((r) => {
+          const session = r.attendance_sessions as { course_id?: string } | null;
+          return session?.course_id === c.id;
+        });
+        const present = courseRecords.filter((r) => r.status === 'present').length;
+        const absent = courseRecords.filter((r) => r.status === 'absent').length;
+        const late = courseRecords.filter((r) => r.status === 'late').length;
+        const total = courseRecords.length;
+        return {
+          course: c,
+          totalSessions: sessionsByCourse[c.id] ?? 0,
+          totalEnrolled: enrolledByCourse[c.id] ?? 0,
+          presentCount: present,
+          absentCount: absent,
+          lateCount: late,
+          rate: total > 0 ? Math.round((present / total) * 100) : 0,
+        };
+      });
+      setCourseStats(stats);
+
+      const studentMap: Record<string, StudentStats> = {};
+      records.forEach(
+        (r: {
+          student_id: string;
+          status: string;
+          students?: { full_name?: string; photo_url?: string; student_code?: string };
+        }) => {
+          if (!r.student_id) return;
+          if (!studentMap[r.student_id]) {
+            studentMap[r.student_id] = {
+              student_id: r.student_id,
+              full_name: r.students?.full_name ?? '',
+              photo_url: r.students?.photo_url ?? '',
+              student_code: r.students?.student_code ?? '',
+              present: 0,
+              absent: 0,
+              late: 0,
+              total: 0,
+              rate: 0,
+              group_name: r.students?.group_name ?? '',
+            };
+          }
+          studentMap[r.student_id].total++;
+          if (r.status === 'present') studentMap[r.student_id].present++;
+          else if (r.status === 'absent') studentMap[r.student_id].absent++;
+          else if (r.status === 'late') studentMap[r.student_id].late++;
         }
-        studentMap[r.student_id].total++;
-        if (r.status === 'present') studentMap[r.student_id].present++;
-        else if (r.status === 'absent') studentMap[r.student_id].absent++;
-        else if (r.status === 'late') studentMap[r.student_id].late++;
-      }
-    );
-    const sList = Object.values(studentMap)
-      .map((s) => ({
-        ...s,
-        rate: s.total > 0 ? Math.round((s.present / s.total) * 100) : 0,
-      }))
-      .sort((a, b) => a.rate - b.rate);
-    setStudentStats(sList);
+      );
+      const sList = Object.values(studentMap)
+        .map((s) => ({
+          ...s,
+          rate: s.total > 0 ? Math.round((s.present / s.total) * 100) : 0,
+        }))
+        .sort((a, b) => a.rate - b.rate);
+      setStudentStats(sList);
     } catch (e) {
       console.error('Erreur fetchData:', e);
     } finally {
@@ -150,20 +149,22 @@ export default function Reports() {
     return 'bg-red-400';
   };
 
-  const filteredStudents = studentStats.filter(s => 
-    filterGroup === 'ALL' || s.group_name === filterGroup
+  const filteredStudents = studentStats.filter(
+    (s) => filterGroup === 'ALL' || s.group_name === filterGroup
   );
 
-  const groups = ['ALL', ...new Set(studentStats.map(s => s.group_name).filter(Boolean))].sort();
+  const groups = ['ALL', ...new Set(studentStats.map((s) => s.group_name).filter(Boolean))].sort();
 
   const exportToPDF = async () => {
     try {
       const doc = new jsPDF();
-      
+
       // Fetch alerts to build "Liste Rouge"
       const res = await fetch(`${API}/api/alerts`);
       const alertsData = res.ok ? await res.json() : [];
-      const criticalAlerts = alertsData.filter((a: any) => a.status === 'active' || a.absence_count >= a.threshold);
+      const criticalAlerts = alertsData.filter(
+        (a: any) => a.status === 'active' || a.absence_count >= a.threshold
+      );
 
       // Title
       doc.setFontSize(22);
@@ -186,7 +187,7 @@ export default function Reports() {
           a.students?.student_code || 'N/A',
           a.courses?.name || 'N/A',
           `${a.absence_count} / ${a.threshold}`,
-          a.status === 'active' ? 'Critique' : a.status
+          a.status === 'active' ? 'Critique' : a.status,
         ]);
 
         autoTable(doc, {
@@ -195,7 +196,7 @@ export default function Reports() {
           body: alertRows,
           theme: 'grid',
           headStyles: { fillColor: [220, 38, 38] },
-          styles: { fontSize: 9 }
+          styles: { fontSize: 9 },
         });
       }
 
@@ -210,12 +211,12 @@ export default function Reports() {
       doc.setTextColor(15, 23, 42);
       doc.text('BILAN PAR COURS', 14, nextY);
 
-      const courseRows = courseStats.map(s => [
+      const courseRows = courseStats.map((s) => [
         s.course.name,
         s.course.teacher_name,
         `${s.presentCount}`,
         `${s.absentCount}`,
-        `${s.rate}%`
+        `${s.rate}%`,
       ]);
 
       autoTable(doc, {
@@ -224,7 +225,7 @@ export default function Reports() {
         body: courseRows,
         theme: 'striped',
         headStyles: { fillColor: [59, 130, 246] },
-        styles: { fontSize: 9 }
+        styles: { fontSize: 9 },
       });
 
       // Section 3: Liste complete (Students)
@@ -233,14 +234,14 @@ export default function Reports() {
       doc.setTextColor(15, 23, 42);
       doc.text('INVENTAIRE DES ETUDIANTS', 14, 20);
 
-      const studentRows = studentStats.map(s => [
+      const studentRows = studentStats.map((s) => [
         s.full_name,
         s.student_code,
         s.group_name || 'N/A',
         `${s.present}`,
         `${s.absent}`,
         `${s.late}`,
-        `${s.rate}%`
+        `${s.rate}%`,
       ]);
 
       autoTable(doc, {
@@ -249,15 +250,15 @@ export default function Reports() {
         body: studentRows,
         theme: 'grid',
         headStyles: { fillColor: [15, 23, 42] },
-        styles: { fontSize: 8 }
+        styles: { fontSize: 8 },
       });
 
       // Signatures
       const finalY = (doc as any).lastAutoTable.finalY + 30;
       if (finalY < 270) {
-         doc.setFontSize(10);
-         doc.text('Signature de l\'Administration :', 20, finalY);
-         doc.text('Cachet de l\'Etablissement :', 130, finalY);
+        doc.setFontSize(10);
+        doc.text("Signature de l'Administration :", 20, finalY);
+        doc.text("Cachet de l'Etablissement :", 130, finalY);
       }
 
       // Save
@@ -317,7 +318,7 @@ export default function Reports() {
               Par Étudiant
             </button>
           </div>
-          <button 
+          <button
             onClick={exportToPDF}
             className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg"
           >

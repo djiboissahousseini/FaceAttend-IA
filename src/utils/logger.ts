@@ -12,7 +12,7 @@ export const logger = {
   warn: (message: string, source: string = 'FRONTEND') => {
     sendToBackend(message, 'WARN', source);
     console.warn(`[${source}] ${message}`);
-  }
+  },
 };
 
 async function sendToBackend(message: string, level: string, source: string) {
@@ -20,7 +20,7 @@ async function sendToBackend(message: string, level: string, source: string) {
     await fetch(`${API}/api/logs/client`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, level, source })
+      body: JSON.stringify({ message, level, source }),
     });
   } catch (e) {
     // Fail silently to avoid infinite loops

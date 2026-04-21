@@ -20,7 +20,7 @@ function App() {
     return localStorage.getItem('faceattend_auth') === 'true';
   });
   const [userRole, setUserRole] = useState<'admin' | 'teacher' | null>(() => {
-    return localStorage.getItem('faceattend_role') as any || null;
+    return (localStorage.getItem('faceattend_role') as any) || null;
   });
   const [currentPage, setCurrentPage] = useState<Page>(() => {
     const role = localStorage.getItem('faceattend_role');
@@ -109,16 +109,26 @@ function App() {
 
     const renderAdminPage = () => {
       switch (currentPage) {
-        case 'dashboard': return <Dashboard />;
-        case 'teacher': return <TeacherDashboard />;
-        case 'teachers': return <Teachers />;
-        case 'students': return <Students />;
-        case 'attendance': return <Attendance />;
-        case 'courses': return <Courses />;
-        case 'alerts': return <Alerts />;
-        case 'reports': return <Reports />;
-        case 'student_space': return <AdminStudentSpace />;
-        default: return <Dashboard />;
+        case 'dashboard':
+          return <Dashboard />;
+        case 'teacher':
+          return <TeacherDashboard />;
+        case 'teachers':
+          return <Teachers />;
+        case 'students':
+          return <Students />;
+        case 'attendance':
+          return <Attendance />;
+        case 'courses':
+          return <Courses />;
+        case 'alerts':
+          return <Alerts />;
+        case 'reports':
+          return <Reports />;
+        case 'student_space':
+          return <AdminStudentSpace />;
+        default:
+          return <Dashboard />;
       }
     };
 
