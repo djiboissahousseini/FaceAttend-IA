@@ -27,8 +27,12 @@ function App() {
     return role === 'teacher' ? 'teacher' : 'dashboard';
   });
   const [studentUser, setStudentUser] = useState<unknown>(() => {
-    const saved = localStorage.getItem('faceattend_student');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('faceattend_student');
+      return saved ? JSON.parse(saved) : null;
+    } catch (_e) {
+      return null;
+    }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

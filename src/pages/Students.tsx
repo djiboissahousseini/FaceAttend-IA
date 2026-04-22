@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { Student, Department } from '../types';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function Students() {
   const [students, setStudents] = useState<Student[]>([]);

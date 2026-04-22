@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Search, Plus, BookOpen, Clock, MapPin, Users, X, ChevronDown } from 'lucide-react';
 import { Course, Department, Teacher } from '../types';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function Courses() {
   const [courses, setCourses] = useState<Course[]>([]);

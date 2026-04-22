@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { Search, Plus, X, Upload, Camera, Loader2, Trash2, Mail, User, Key } from 'lucide-react';
 import { Teacher } from '../types';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function Teachers() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);

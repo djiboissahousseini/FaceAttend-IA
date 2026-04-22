@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { BookOpenCheck, GraduationCap, UserCheck, UserX, Users } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import { AttendanceRecord, DashboardStats } from '../types';
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 interface RecentRecord extends AttendanceRecord {
   student?: {

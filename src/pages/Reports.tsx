@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 import { TrendingUp, TrendingDown, Download } from 'lucide-react';
 import { Course } from '../types';
 import jsPDF from 'jspdf';

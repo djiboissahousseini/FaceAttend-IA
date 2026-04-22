@@ -46,7 +46,12 @@ export default function Layout({
 }: LayoutProps) {
   const userRole = localStorage.getItem('faceattend_role') || 'admin';
   const userJson = localStorage.getItem('faceattend_user');
-  const user = userJson ? JSON.parse(userJson) : null;
+  let user = null;
+  try {
+    user = userJson ? JSON.parse(userJson) : null;
+  } catch (_e) {
+    user = null;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">

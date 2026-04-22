@@ -1,5 +1,4 @@
-// ─── FaceAttend — API Layer (Backend local FastAPI sur port 8000) ─────────────
-const API = 'http://localhost:8000';
+import { API_URL as API } from '../config';
 
 // ─── Helper fetch ─────────────────────────────────────────────────────────────
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {

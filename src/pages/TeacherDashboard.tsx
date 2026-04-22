@@ -21,8 +21,8 @@ import {
 } from 'lucide-react';
 import { DashboardStats, Course, Session, Teacher } from '../types';
 import { checkHealth, getDashboardStats, getCourses, getSessions, getTeachers } from '../lib/api';
-
-const API_URL = 'http://localhost:8000';
+import { API_URL } from '../config';
+const _API = API_URL;
 
 interface ConnectionStatus {
   api: 'online' | 'offline' | 'checking';

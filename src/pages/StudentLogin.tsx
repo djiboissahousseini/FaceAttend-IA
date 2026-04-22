@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 import { Mail, Zap, ArrowRight, GraduationCap, Fingerprint, Eye, EyeOff } from 'lucide-react';
 import { logger } from '../utils/logger';
 

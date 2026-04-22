@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { Session, Student, Teacher } from '../types';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 interface SessionAttendanceStudent extends Student {
   attendance_id?: number | null;

@@ -1,0 +1,10 @@
+
+> vite-react-typescript-starter@0.0.0 lint
+> eslint .
+
+
+/home/usain/Bureau/FaceAttend/src/pages/ClassroomCamera.tsx
+  158:6  warning  React Hook useEffect has a missing dependency: 'selectedDeviceId'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 1 problem (0 errors, 1 warning)
+

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, User, ShieldCheck, Zap, ArrowRight, Eye, EyeOff, GraduationCap } from 'lucide-react';
+import { API_URL } from '../config';
 
 interface LoginProps {
   onLogin: (status: boolean) => void;
@@ -32,7 +33,7 @@ export default function Login({ onLogin, forceRole }: LoginProps) {
         }
       } else {
         // Enseignant: Appel API
-        const res = await fetch('http://localhost:8000/api/teachers/login', {
+        const res = await fetch(`${API_URL}/api/teachers/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: username, password }),

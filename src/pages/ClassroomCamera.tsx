@@ -29,7 +29,8 @@ type ScanStatus =
   | 'unknown'
   | 'error';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function ClassroomCamera() {
   const webcamRef = useRef<Webcam>(null);

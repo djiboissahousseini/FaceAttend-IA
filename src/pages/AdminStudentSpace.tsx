@@ -15,7 +15,8 @@ import {
 import { Student } from '../types';
 import StudentDashboard from './StudentDashboard';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function AdminStudentSpace() {
   const [students, setStudents] = useState<Student[]>([]);

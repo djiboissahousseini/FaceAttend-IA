@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, Bell, Filter, Search, ChevronDown } from 'lucide-react';
 import { AbsenceAlert } from '../types';
 
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState<AbsenceAlert[]>([]);

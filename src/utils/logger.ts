@@ -1,4 +1,5 @@
-const API = 'http://localhost:8000';
+import { API_URL } from '../config';
+const API = API_URL;
 
 export const logger = {
   info: (message: string, source: string = 'FRONTEND') => {
