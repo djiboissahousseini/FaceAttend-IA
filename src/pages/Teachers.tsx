@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Search, Plus, X, Upload, Camera, Loader2, Trash2, Mail, User, Key } from 'lucide-react';
+import { getPhotoUrl } from '../utils/image';
 import { Teacher } from '../types';
 
 import { API_URL } from '../config';
@@ -19,8 +20,8 @@ export default function Teachers() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function Teachers() {
 
   // Note: Il n'y a pas d'endpoint DELETE /api/teachers dans le backend actuel
   // Je vais ajouter un message d'information ou omettre la fonction si non supportée
-  async function deleteTeacher(_id: number) {
+  async function deleteTeacher(_id: string) {
     alert("La suppression des enseignants n'est pas encore implémentée dans le backend.");
     setDeletingId(null);
   }
@@ -181,7 +182,7 @@ export default function Teachers() {
                       <div className="flex items-center gap-3">
                         <img
                           src={
-                            teacher.photo_url ||
+                            getPhotoUrl(teacher.photo_url) ||
                             `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name)}&background=0f172a&color=fff&size=40`
                           }
                           alt={teacher.name}

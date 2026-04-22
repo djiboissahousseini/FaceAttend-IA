@@ -18,17 +18,39 @@ import {
   ShieldAlert,
   Key,
   Lock,
+  Users,
+  TrendingUp,
 } from 'lucide-react';
 import { DashboardStats, Course, Session, Teacher } from '../types';
 import { checkHealth, getDashboardStats, getCourses, getSessions, getTeachers } from '../lib/api';
+import { getPhotoUrl } from '../utils/image';
 import { API_URL } from '../config';
-const _API = API_URL;
 
 interface ConnectionStatus {
   api: 'online' | 'offline' | 'checking';
   db: 'online' | 'offline' | 'unknown';
   latency: number | null;
   lastChecked: string | null;
+}
+
+function isTeacher(value: unknown): value is Teacher {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<Teacher>;
+  return (
+    typeof candidate.id === 'number' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.email === 'string'
+  );
+}
+
+function parseTeacherFromStorage(raw: string | null): Teacher | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return isTeacher(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function TeacherDashboard() {
@@ -50,8 +72,9 @@ export default function TeacherDashboard() {
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loggedInTeacher, setLoggedInTeacher] = useState<Teacher | null>(() => {
     // Tenter de récupérer le prof en mémoire (pour résister au rafraîchissement F5)
-    const saved = localStorage.getItem('faceattend_simulated_teacher');
-    return saved ? JSON.parse(saved) : null;
+    const parsed = parseTeacherFromStorage(localStorage.getItem('faceattend_simulated_teacher'));
+    if (!parsed) localStorage.removeItem('faceattend_simulated_teacher');
+    return parsed;
   });
 
   const [loading, setLoading] = useState(false);
@@ -78,8 +101,21 @@ export default function TeacherDashboard() {
     try {
       const res = await fetch(`${API_URL}/api/teachers/${id}/security`);
       if (res.ok) {
-        const data = await res.json();
-        setSecurityInfo(data);
+        const data = (await res.json().catch(() => null)) as {
+          is_blocked?: unknown;
+          failed_attempts?: unknown;
+          password?: unknown;
+        } | null;
+        if (
+          data &&
+          typeof data.is_blocked === 'boolean' &&
+          typeof data.failed_attempts === 'number' &&
+          typeof data.password === 'string'
+        ) {
+          setSecurityInfo(
+            data as { is_blocked: boolean; failed_attempts: number; password: string }
+          );
+        }
       }
     } catch (e) {
       console.error('Error fetching security info', e);
@@ -122,11 +158,20 @@ export default function TeacherDashboard() {
         const userJson = localStorage.getItem('faceattend_user');
 
         if (role === 'teacher' && userJson) {
-          const user = JSON.parse(userJson);
-          setLoggedInTeacher(user);
+          const user = parseTeacherFromStorage(userJson);
+          if (user) {
+            setLoggedInTeacher(user);
+          } else {
+            localStorage.removeItem('faceattend_user');
+          }
         } else if (role === 'admin') {
-          const teachers = await getTeachers();
-          setTeachersList(teachers);
+          try {
+            const teachers = await getTeachers();
+            setTeachersList(Array.isArray(teachers) ? (teachers as Teacher[]) : []);
+          } catch (_e) {
+            console.error('Impossible de charger la liste des enseignants.');
+            setTeachersList([]);
+          }
         }
       } catch (e) {
         console.error('Failed to load teachers for auth', e);
@@ -194,9 +239,13 @@ export default function TeacherDashboard() {
         getCourses(),
         getSessions(),
       ]);
-      setStats(dashboardStats);
-      setAllCourses(courseData);
-      setAllSessions(sessionData);
+      setStats(
+        dashboardStats && typeof dashboardStats === 'object'
+          ? (dashboardStats as DashboardStats)
+          : null
+      );
+      setAllCourses(Array.isArray(courseData) ? (courseData as Course[]) : []);
+      setAllSessions(Array.isArray(sessionData) ? (sessionData as Session[]) : []);
     } catch (_e) {
       setError('Impossible de charger les données. Assurez-vous que le backend est démarré.');
     } finally {
@@ -232,10 +281,14 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ email: loginEmail, password: loginPass }),
       });
       if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('faceattend_teacher_auth', 'true');
-        localStorage.setItem('faceattend_user', JSON.stringify(data));
-        setLoggedInTeacher(data);
+        const data = (await res.json().catch(() => null)) as unknown;
+        if (isTeacher(data)) {
+          localStorage.setItem('faceattend_teacher_auth', 'true');
+          localStorage.setItem('faceattend_user', JSON.stringify(data));
+          setLoggedInTeacher(data);
+        } else {
+          alert('Réponse de connexion invalide. Veuillez réessayer.');
+        }
       } else {
         alert('Identifiants incorrects ou compte bloqué.');
       }
@@ -422,7 +475,7 @@ export default function TeacherDashboard() {
           <div className="flex items-center gap-4">
             <img
               src={
-                loggedInTeacher?.photo_url ||
+                getPhotoUrl(loggedInTeacher?.photo_url) ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(loggedInTeacher?.name || 'User')}&background=020617&color=00f0ff`
               }
               alt={loggedInTeacher?.name || 'User'}

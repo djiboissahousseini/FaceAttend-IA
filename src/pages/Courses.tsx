@@ -28,6 +28,7 @@ export default function Courses() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [enrollCounts, setEnrollCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchData();
@@ -37,14 +38,25 @@ export default function Courses() {
     setLoading(true);
     setError(null);
     try {
-      const [coursesRes, deptsRes, teachersRes] = await Promise.all([
+      const [coursesRes, deptsRes, teachersRes, enrollRes] = await Promise.all([
         fetch(`${API}/api/courses`).then((r) => r.json()),
         fetch(`${API}/api/departments`).then((r) => r.json()),
         fetch(`${API}/api/teachers`).then((r) => r.json()),
+        fetch(`${API}/api/enrollments`)
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
       ]);
       setCourses(coursesRes ?? []);
       setDepartments(deptsRes ?? []);
       setTeachers(teachersRes ?? []);
+      // Compter les inscriptions par cours
+      const counts: Record<string, number> = {};
+      if (Array.isArray(enrollRes)) {
+        for (const e of enrollRes) {
+          if (e.course_id) counts[e.course_id] = (counts[e.course_id] ?? 0) + 1;
+        }
+      }
+      setEnrollCounts(counts);
     } catch (_e) {
       setError('Impossible de charger les données.');
     } finally {

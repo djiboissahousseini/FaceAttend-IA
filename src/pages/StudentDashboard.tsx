@@ -1,3 +1,4 @@
+import { getPhotoUrl } from '../utils/image';
 import React, { useEffect, useState } from 'react';
 import { API_URL } from '../config';
 const API = API_URL;
@@ -380,11 +381,8 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               <div className="relative w-28 h-28 rounded-full border border-emerald-500/50 p-1 bg-slate-950 z-10 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
                 <img
                   src={
-                    student?.photo_url
-                      ? student.photo_url.startsWith('http')
-                        ? student.photo_url
-                        : `${API}${student.photo_url}`
-                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name || '')}&background=10b981&color=000`
+                    getPhotoUrl(student?.photo_url) ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name || '')}&background=10b981&color=000`
                   }
                   className="w-full h-full object-cover rounded-full"
                   alt="Profile"

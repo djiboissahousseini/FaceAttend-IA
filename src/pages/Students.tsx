@@ -1,3 +1,4 @@
+import { getPhotoUrl } from '../utils/image';
 import { useEffect, useState, useRef } from 'react';
 import {
   Search,
@@ -74,7 +75,7 @@ export default function Students() {
       email: student.email,
       department_id: student.department_id || '',
       group_name: student.group_name || '',
-      photo_url: student.photo_url || '',
+      photo_url: getPhotoUrl(student.photo_url) || '',
       enrolled_at: new Date(student.enrolled_at).toISOString().split('T')[0],
     });
     setEditingId(student.id);
@@ -280,7 +281,7 @@ export default function Students() {
                         <div className="relative shrink-0">
                           <img
                             src={
-                              student.photo_url ||
+                              getPhotoUrl(student.photo_url) ||
                               `https://ui-avatars.com/api/?name=${encodeURIComponent(student.full_name)}&background=3b82f6&color=fff&size=40`
                             }
                             alt={student.full_name}

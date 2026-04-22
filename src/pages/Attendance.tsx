@@ -30,6 +30,14 @@ interface SessionAttendanceResponse {
   students: SessionAttendanceStudent[];
 }
 
+async function readJsonSafe<T>(res: Response): Promise<T | null> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export default function Attendance() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -110,20 +118,30 @@ export default function Attendance() {
   async function fetchTeachers() {
     try {
       const res = await fetch(`${API}/api/teachers`);
-      const data = await res.json();
-      setTeachers(data ?? []);
+      if (!res.ok) {
+        setTeachers([]);
+        return;
+      }
+      const data = await readJsonSafe<unknown>(res);
+      setTeachers(Array.isArray(data) ? (data as Teacher[]) : []);
     } catch (_e) {
       console.error('Erreur lors de la récupération des enseignants');
+      setTeachers([]);
     }
   }
 
   async function fetchSessions() {
     try {
       const res = await fetch(`${API}/api/sessions`);
-      const data = await res.json();
-      setSessions(data ?? []);
+      if (!res.ok) {
+        setSessions([]);
+        return;
+      }
+      const data = await readJsonSafe<unknown>(res);
+      setSessions(Array.isArray(data) ? (data as Session[]) : []);
     } catch (_e) {
       console.error('Erreur lors de la récupération des sessions');
+      setSessions([]);
     }
   }
 
@@ -131,38 +149,63 @@ export default function Attendance() {
     setSelectedSessionId(sessionId);
     try {
       const res = await fetch(`${API}/api/sessions/${sessionId}/attendance`);
-      const data = await res.json();
-      setSessionDetails(data);
+      if (!res.ok) {
+        setSessionDetails(null);
+        return;
+      }
+      const data = await readJsonSafe<unknown>(res);
+      if (
+        data &&
+        typeof data === 'object' &&
+        'session' in data &&
+        'students' in data &&
+        Array.isArray((data as SessionAttendanceResponse).students)
+      ) {
+        setSessionDetails(data as SessionAttendanceResponse);
+      } else {
+        setSessionDetails(null);
+      }
     } catch (_e) {
       console.error('Erreur lors du chargement de la session');
+      setSessionDetails(null);
     }
   }
 
   async function createSession() {
     if (!sessionForm.teacher_id || !sessionForm.course_name || !sessionForm.group_name) return;
-    const res = await fetch(`${API}/api/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...sessionForm, teacher_id: Number(sessionForm.teacher_id) }),
-    });
-    const data = await res.json();
-    await fetchSessions();
-    if (data.id) loadSession(data.id);
+    try {
+      const res = await fetch(`${API}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...sessionForm, teacher_id: Number(sessionForm.teacher_id) }),
+      });
+      if (!res.ok) return;
+      const data = await readJsonSafe<{ id?: number }>(res);
+      await fetchSessions();
+      if (typeof data?.id === 'number') loadSession(data.id);
+    } catch (e) {
+      console.error('Erreur création session:', e);
+    }
   }
 
   async function markAttendance(studentId: string, status: string) {
     if (!selectedSessionId) return;
-    await fetch(`${API}/api/records/upsert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        student_id: studentId,
-        session_id: selectedSessionId.toString(),
-        status,
-        method: 'manual',
-      }),
-    });
-    loadSession(selectedSessionId);
+    try {
+      const res = await fetch(`${API}/api/records/upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: studentId,
+          session_id: selectedSessionId.toString(),
+          status,
+          method: 'manual',
+        }),
+      });
+      if (!res.ok) return;
+      loadSession(selectedSessionId);
+    } catch (e) {
+      console.error('Erreur marquage présence:', e);
+    }
   }
 
   async function cancelActiveSession(sessionId: number | string) {
@@ -488,14 +531,14 @@ export default function Attendance() {
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span className="text-[10px] font-black text-emerald-600 uppercase">
                       Présents:{' '}
-                      {sessionDetails.students.filter((s) => s.status === 'present').length}
+                      {(sessionDetails.students || []).filter((s) => s.status === 'present').length}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                {sessionDetails.students.map((student) => (
+                {(sessionDetails.students || []).map((student) => (
                   <div
                     key={student.id}
                     className="p-4 rounded-3xl border border-slate-100 bg-white hover:border-blue-200 transition-all group/card relative overflow-hidden"

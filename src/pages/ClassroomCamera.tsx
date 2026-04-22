@@ -155,6 +155,7 @@ export default function ClassroomCamera() {
         setSelectedDeviceId(video[0].deviceId);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listen for classroom changes AND remote commands

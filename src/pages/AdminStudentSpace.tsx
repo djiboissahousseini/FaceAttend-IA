@@ -16,6 +16,7 @@ import { Student } from '../types';
 import StudentDashboard from './StudentDashboard';
 
 import { API_URL } from '../config';
+import { getPhotoUrl } from '../utils/image';
 const API = API_URL;
 
 export default function AdminStudentSpace() {
@@ -49,12 +50,6 @@ export default function AdminStudentSpace() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getPhotoUrl = (url: string | null | undefined) => {
-    if (!url) return null;
-    if (url.startsWith('http')) return url;
-    return `${API}${url}`;
   };
 
   const handleSelectStudent = (student: Student) => {

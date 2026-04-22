@@ -44,6 +44,18 @@ function App() {
     }
   }, []);
 
+  // ─── PROTECTION ANTI-MOBILE (Réseau Local) ──────────────
+  // Si l'utilisateur n'est pas sur le PC central (localhost) et tente d'accéder à l'admin ou au prof
+  if (
+    window.location.hostname !== 'localhost' &&
+    (window.location.pathname.startsWith('/admin') ||
+      window.location.pathname.startsWith('/teacher') ||
+      window.location.pathname === '/')
+  ) {
+    window.location.href = '/portal';
+    return null;
+  }
+
   const handleLogin = (authenticated: boolean) => {
     if (authenticated) {
       const savedRole = localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null;
