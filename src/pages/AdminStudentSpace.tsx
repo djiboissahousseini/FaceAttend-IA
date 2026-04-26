@@ -120,14 +120,14 @@ export default function AdminStudentSpace() {
 
                 <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 flex justify-center">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`http://${deviceIP}:5173/portal`)}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`http://${deviceIP}:5173/portal?email=${currentStudent.email}&code=${currentStudent.student_code}`)}`}
                     alt="QR Code"
                     className="w-48 h-48 mix-blend-multiply"
                   />
                 </div>
 
                 <div className="bg-emerald-50 p-4 rounded-2xl text-[10px] text-emerald-700 font-bold uppercase tracking-widest leading-relaxed break-all">
-                  Lien : http://{deviceIP}:5173/portal
+                  Lien Magique : Connexion Automatique Active
                 </div>
 
                 <button

@@ -168,22 +168,17 @@ export default function ClassroomCamera() {
       if (e.key === `faceattend_cmd_${classroom}` && e.newValue) {
         try {
           const data = JSON.parse(e.newValue);
+          // Only process if the command is recent (within 5 seconds)
+          if (Date.now() - data.timestamp > 5000) return;
+
           switch (data.command) {
             case 'OVERRIDE_TEACHER':
               if (status === 'ready_teacher' || status === 'standby') {
                 setIsTeacherUnlocked(true);
                 setStatus('ready');
-                setResult({ message: 'OVERRIDE ADMIN' });
+                setResult({ message: 'ACCÈS ADMIN' });
                 setTimeout(() => setResult(null), 3000);
               }
-              break;
-
-            case 'FORCE_STANDBY':
-              if (activeSession) setIgnoredSessionId(activeSession.id);
-              setActiveSession(null);
-              setIsTeacherUnlocked(false);
-              setIsForcedSession(false);
-              setStatus('standby');
               break;
 
             case 'REFRESH_TERMINAL':
@@ -193,18 +188,13 @@ export default function ClassroomCamera() {
             case 'FORCE_START_SESSION': {
               const fetchSessionToForce = async () => {
                 try {
-                  const res = await fetch(`${API}/api/sessions`);
-                  const sessions: Session[] = await res.json();
-                  const target = sessions.find(
-                    (s) => Number(s.id) === Number(data.payload.session_id)
-                  );
-                  if (target) {
-                    setActiveSession(target);
-                    setIgnoredSessionId(null);
-                    setIsTeacherUnlocked(false);
-                    setIsForcedSession(true);
-                    setStatus('ready_teacher');
-                  }
+                  const res = await fetch(`${API}/api/sessions/${data.payload.session_id}`);
+                  if (!res.ok) throw new Error('Session non trouvée');
+                  const target: Session = await res.json();
+                  setActiveSession(target);
+                  setIsTeacherUnlocked(false);
+                  setIsForcedSession(true);
+                  setStatus('ready_teacher');
                 } catch (err) {
                   console.error('Failed to force session', err);
                 }
@@ -221,30 +211,39 @@ export default function ClassroomCamera() {
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [classroom, status, activeSession]);
+  }, [classroom, status]);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  // SAFE POLLING: Use a separate effect that doesn't depend on volatile state
   useEffect(() => {
+    let isMounted = true;
+    
     const checkActiveSession = async () => {
       try {
         const res = await fetch(`${API}/api/sessions/active?room=${encodeURIComponent(classroom)}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (isMounted && !isForcedSession) setStatus('standby');
+          return;
+        }
 
         const currentSession = await res.json();
 
+        if (!isMounted) return;
+
         if (currentSession && currentSession.id) {
-          if (currentSession.id !== ignoredSessionId) {
-            if (!activeSession || activeSession.id !== currentSession.id) {
-              setActiveSession(currentSession);
+          setActiveSession(prev => {
+            // Update only if it's a new session
+            if (!prev || prev.id !== currentSession.id) {
               setIsTeacherUnlocked(false);
-              setIsForcedSession(false);
               setStatus('ready_teacher');
+              return currentSession;
             }
-          }
+            return prev;
+          });
         } else {
           if (!isForcedSession) {
             setActiveSession(null);
@@ -253,13 +252,17 @@ export default function ClassroomCamera() {
           }
         }
       } catch (_e) {
-        console.error('Erreur de détection');
+        // Silent fail for background polling
       }
     };
+
     checkActiveSession();
-    const interval = setInterval(checkActiveSession, 10000);
-    return () => clearInterval(interval);
-  }, [classroom, activeSession, ignoredSessionId, isForcedSession]);
+    const interval = setInterval(checkActiveSession, 10000); // Poll every 10s
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [classroom, isForcedSession]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -435,30 +438,31 @@ export default function ClassroomCamera() {
           className={`absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 ${themeClass} z-30 transition-colors duration-500`}
         />
 
-        {status === 'standby' ? (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-[#020617] text-[#00f0ff]/40">
-            <Fingerprint size={100} className="mb-6 animate-pulse opacity-40" />
-            <h2 className="text-3xl font-bold tracking-[0.2em] uppercase mb-3 text-[#00f0ff]/60">
-              VEILLE SYSTÈME
-            </h2>
-            <p className="tracking-[0.1em] text-sm text-slate-500">
-              AUCUN COURS DÉTECTÉ POUR LE MOMENT
-            </p>
-          </div>
-        ) : (
-          <div className="relative w-full h-full overflow-hidden">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{
-                deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-                facingMode: 'user',
-              }}
-              className={`w-full h-full object-cover grayscale-[20%] contrast-[1.1] transition-all duration-700 ${status.includes('holding') || status.includes('scanning') ? 'scale-105 filter brightness-110' : 'scale-100'}`}
-            />
+        <div className="relative w-full h-full overflow-hidden">
+          <Webcam
+            ref={webcamRef}
+            audio={false}
+            screenshotFormat="image/jpeg"
+            videoConstraints={{
+              deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+              facingMode: 'user',
+            }}
+            className={`w-full h-full object-cover grayscale-[20%] contrast-[1.1] transition-all duration-700 ${status.includes('holding') || status.includes('scanning') ? 'scale-105 filter brightness-110' : 'scale-100'}`}
+          />
 
-            {/* ─── THE FLOATING SCANNING BAR (LOOPING) ─── */}
+          {status === 'standby' && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md text-[#00f0ff]/40">
+              <Fingerprint size={100} className="mb-6 animate-pulse opacity-40" />
+              <h2 className="text-3xl font-bold tracking-[0.2em] uppercase mb-3 text-[#00f0ff]/60">
+                ATTENTE SESSION
+              </h2>
+              <p className="tracking-[0.1em] text-sm text-slate-500">
+                SYSTÈME PRÊT - EN ATTENTE DE SIGNAL
+              </p>
+            </div>
+          )}
+
+          {/* ─── THE FLOATING SCANNING BAR (LOOPING) ─── */}
             {(status.includes('holding') || status.includes('scanning')) && (
               <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
                 <style>{`
@@ -639,7 +643,6 @@ export default function ClassroomCamera() {
               </div>
             )}
           </div>
-        )}
       </div>
 
       {/* ─── HUD FOOTER ─── */}

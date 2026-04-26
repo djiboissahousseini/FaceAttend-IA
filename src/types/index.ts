@@ -130,4 +130,5 @@ export type Page =
   | 'attendance'
   | 'classroom'
   | 'alerts'
-  | 'reports';
+  | 'reports'
+  | 'student_space';

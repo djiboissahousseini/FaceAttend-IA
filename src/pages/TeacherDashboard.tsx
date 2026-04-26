@@ -1,5 +1,4 @@
-// src/pages/TeacherDashboard.tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen,
   Calendar,
@@ -25,6 +24,7 @@ import {
   PlayCircle,
   XCircle,
   ExternalLink,
+  ImagePlus,
 } from 'lucide-react';
 import { DashboardStats, Course, Session, Teacher } from '../types';
 import { checkHealth, getDashboardStats, getCourses, getSessions, getTeachers } from '../lib/api';
@@ -58,7 +58,7 @@ function parseTeacherFromStorage(raw: string | null): Teacher | null {
   }
 }
 
-export default function TeacherDashboard() {
+export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher' | 'simulation' }) {
   // ─── Authentication State ───────────────────────────────────────────────────
   const [teachersList, setTeachersList] = useState<Teacher[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
@@ -86,6 +86,8 @@ export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
   const [activeClassroom, setActiveClassroom] = useState<string>('Salle B1');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (loggedInTeacher) {
@@ -208,6 +210,47 @@ export default function TeacherDashboard() {
       });
     }
   }, []);
+ 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !loggedInTeacher?.id) return;
+ 
+    setIsUploadingPhoto(true);
+    const formData = new FormData();
+    formData.append('file', file);
+ 
+    try {
+      const res = await fetch(`${API_URL}/api/teachers/${loggedInTeacher.id}/photo`, {
+        method: 'POST',
+        body: formData,
+      });
+ 
+      if (res.ok) {
+        const data = await res.json();
+        // Update local states
+        const updatedTeacher = { ...loggedInTeacher, photo_url: data.url };
+        setLoggedInTeacher(updatedTeacher);
+        
+        // Sync storage based on how the user logged in
+        const role = localStorage.getItem('faceattend_role');
+        if (role === 'teacher') {
+          localStorage.setItem('faceattend_user', JSON.stringify(updatedTeacher));
+        } else if (role === 'admin') {
+          localStorage.setItem('faceattend_simulated_teacher', JSON.stringify(updatedTeacher));
+        }
+        
+        alert("Photo de profil mise à jour avec succès.");
+      } else {
+        alert("Erreur lors de l'envoi de la photo.");
+      }
+    } catch (err) {
+      console.error('Upload Error:', err);
+      alert("Erreur réseau lors de l'envoi.");
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const fetchData = useCallback(async () => {
     if (!loggedInTeacher) return;
@@ -357,7 +400,28 @@ export default function TeacherDashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-4">
-            <img src={getPhotoUrl(loggedInTeacher?.photo_url) || `https://ui-avatars.com/api/?name=${encodeURIComponent(loggedInTeacher?.name || 'User')}`} alt="Avatar" className="w-16 h-16 rounded-2xl border-2 border-slate-200" />
+            <div className="relative group">
+              <img 
+                src={getPhotoUrl(loggedInTeacher?.photo_url) || `https://ui-avatars.com/api/?name=${encodeURIComponent(loggedInTeacher?.name || 'User')}`} 
+                alt="Avatar" 
+                className={`w-20 h-20 rounded-2xl border-4 ${isUploadingPhoto ? 'border-blue-400 animate-pulse opacity-50' : 'border-white shadow-md'} object-cover transition-all`} 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity"
+                title="Changer ma photo"
+              >
+                {isUploadingPhoto ? <RefreshCw size={24} className="animate-spin" /> : <ImagePlus size={24} />}
+              </button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handlePhotoUpload} 
+              />
+            </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-800">Pr. {loggedInTeacher?.name}</h1>
               <p className="text-slate-500 text-sm">{loggedInTeacher?.email}</p>

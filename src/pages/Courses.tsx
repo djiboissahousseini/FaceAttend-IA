@@ -342,6 +342,7 @@ export default function Courses() {
                     schedule_time: '',
                     room: '',
                     group_name: 'ALL',
+                    course_type: 'Cours',
                     absence_threshold: 5,
                   });
                 }}

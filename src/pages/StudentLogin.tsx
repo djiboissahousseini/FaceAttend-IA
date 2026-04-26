@@ -19,6 +19,43 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
 
   useEffect(() => {
     document.title = DOC_TITLE.studentLogin;
+    
+    // Auto-login via URL params (QR Code magique)
+    // On lit les params DIRECTEMENT et on appelle l'API sans passer par le state
+    // pour éviter le bug de closure (state vide lors de la capture)
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get('email');
+    const codeParam = params.get('code');
+    
+    if (emailParam && codeParam) {
+      setEmail(emailParam);
+      setCode(codeParam);
+      setLoading(true);
+      
+      // Appel direct à l'API avec les valeurs des params (pas du state)
+      fetch(`${API}/api/student/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailParam, student_code: codeParam }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.detail || 'Identifiants incorrects');
+          }
+          return res.json();
+        })
+        .then((student) => {
+          logger.info(`Auto-login QR réussi: ${student.id}`, 'STUDENT_PORTAL');
+          localStorage.setItem('faceattend_student', JSON.stringify(student));
+          onLogin(student);
+        })
+        .catch((_err) => {
+          setError('Identifiants QR invalides. Veuillez saisir manuellement.');
+          setLoading(false);
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

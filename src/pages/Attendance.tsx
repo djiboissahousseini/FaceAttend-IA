@@ -14,7 +14,7 @@ import {
   CalendarClock,
   XCircle,
 } from 'lucide-react';
-import { Session, Student, Teacher } from '../types';
+import { Session, Student, Teacher, Course } from '../types';
 
 import { API_URL } from '../config';
 const API = API_URL;
@@ -45,6 +45,7 @@ export default function Attendance() {
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionAttendanceResponse | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
+  const [selectedAnticipateSession, setSelectedAnticipateSession] = useState<string>('');
 
   // Forms
   const [sessionForm, setSessionForm] = useState({
@@ -100,7 +101,7 @@ export default function Attendance() {
     };
 
     fetchActiveSession();
-    const interval = setInterval(fetchActiveSession, 15000);
+    const interval = setInterval(fetchActiveSession, 3000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -235,6 +236,10 @@ export default function Attendance() {
     setActiveSession(null);
     await fetchSessions();
   }
+
+  const anticipateSessions = sessions.filter(
+    (s) => s.status !== 'active' && s.status !== 'closed' && s.status !== 'cancelled'
+  );
 
   const rooms = ['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'];
 

@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Clock,
   MapPin,
+  RefreshCw,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
 import { DOC_TITLE } from '../constants/documentTitles';
@@ -60,6 +61,8 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     document.title = DOC_TITLE.studentApp;
@@ -121,6 +124,40 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
     }
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !student?.id) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`${API}/api/students/${student.id}/photo`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Update local state and storage
+        const updatedStudent = { ...student, photo_url: data.url };
+        setStudent(updatedStudent);
+        localStorage.setItem('faceattend_student', JSON.stringify(updatedStudent));
+        // Force refresh stats to ensure AI encoding is ready
+        fetchStats(student.id);
+      } else {
+        alert("Erreur lors de l'envoi de la photo.");
+      }
+    } catch (err) {
+      console.error('Upload Error:', err);
+      alert("Erreur réseau lors de l'envoi.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -167,6 +204,22 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
     if (activeTab === 'dashboard') {
       return (
         <div className="space-y-8 animate-in fade-in duration-700 flex flex-col items-center">
+          <div className="w-full flex justify-between items-center mb-[-24px] px-2 relative z-20">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]" />
+              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Live Sync Active</span>
+            </div>
+            <button 
+              onClick={() => {
+                setLoading(true);
+                fetchStats(student?.id || simulatedStudentId || '');
+              }}
+              className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 transition-all active:scale-90"
+              title="Actualiser mes données"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <UniversityHeader />
 
           {/* HUGE Attendance Gauge - ILLUMINATED VIEW */}
@@ -582,7 +635,38 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                   alt="Profile"
                 />
               </div>
+
+              {/* UPLOAD BUTTON OVERLAY */}
+              {!simulatedStudentId && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="absolute bottom-0 right-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 border-4 border-slate-950 hover:bg-emerald-400 transition-all active:scale-90 shadow-xl z-20 group"
+                  title="Changer ma photo"
+                >
+                  {isUploading ? (
+                    <RefreshCw size={18} className="animate-spin" />
+                  ) : (
+                    <ScanFace size={18} />
+                  )}
+                  
+                  {/* Floating Tooltip */}
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase rounded pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Mise à jour IA
+                  </div>
+                </button>
+              )}
             </div>
+
+            {/* Hidden Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+            />
+
             <div className="space-y-1 z-10">
               <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none">
                 {student?.name}

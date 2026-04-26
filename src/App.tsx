@@ -99,7 +99,7 @@ function App() {
     if (!isAuthenticated || userRole !== 'teacher') {
       return <Login onLogin={handleLogin} forceRole="teacher" />;
     }
-    return <TeacherDashboard />;
+    return <TeacherDashboard mode="teacher" />;
   }
 
   // ─── REDIRECTION RACINE -> ADMIN ─────────────────────
@@ -128,7 +128,7 @@ function App() {
         case 'dashboard':
           return <Dashboard />;
         case 'teacher':
-          return <TeacherDashboard />;
+          return <TeacherDashboard mode="simulation" />;
         case 'teachers':
           return <Teachers />;
         case 'students':

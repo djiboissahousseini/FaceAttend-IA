@@ -141,7 +141,12 @@ class StudentCreate(BaseModel):
         return v
 
 class StudentUpdate(BaseModel):
-    is_active: bool
+    is_active: Optional[bool] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    student_code: Optional[str] = None
+    department_id: Optional[str] = None
+    group_name: Optional[str] = None
 
 class CourseCreate(BaseModel):
     course_code: str
@@ -222,13 +227,20 @@ async def upload_file(file: UploadFile = File(...)):
 
 # ─── Health ──────────────────────────────────────────────────────────────────
 
-@app.get("/api/health")
-def health_check(db: Session = Depends(get_db)):
+@app.get("/api/classrooms")
+def get_classrooms(db: Session = Depends(get_db)):
     try:
-        db.execute(text("SELECT 1"))
-        return {"status": "Online", "database": "Online", "session_id": SESSION_ID}
+        # On ne prend que les salles définies dans l'emploi du temps (courses)
+        # On exclut 'B5' qui n'est pas une salle selon le feedback utilisateur
+        query = text("""
+            SELECT DISTINCT room FROM courses 
+            WHERE room IS NOT NULL AND room != '' AND room != 'B5'
+            ORDER BY room
+        """)
+        rows = db.execute(query).fetchall()
+        return [r[0] for r in rows]
     except Exception as e:
-        return {"status": "Online", "database": f"Error: {e}", "session_id": SESSION_ID}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/logs")
 def get_system_logs():
@@ -347,6 +359,44 @@ def update_teacher(teacher_id: int, t: TeacherCreate, db: Session = Depends(get_
         db.rollback()
         print(f"Error updating teacher: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.post("/api/teachers/{teacher_id}/photo")
+async def update_teacher_photo(teacher_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        # 1. Sauvegarder le fichier
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_filename = f"teacher_{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        url = f"http://localhost:8000/uploads/{unique_filename}"
+        
+        # 2. Recalculer l'embedding
+        encoding = compute_face_encoding(file_path)
+        encoding_json = json.dumps(encoding) if encoding else None
+        
+        # 3. Mettre à jour la base
+        query = text("""
+            UPDATE teachers 
+            SET photo_url = :photo_url, 
+                face_encoding = CAST(:face_encoding AS jsonb),
+                face_embedding = CAST(:face_embedding AS float[])
+            WHERE id = :id
+        """)
+        db.execute(query, {
+            "photo_url": url,
+            "face_encoding": encoding_json,
+            "face_embedding": encoding,
+            "id": teacher_id
+        })
+        db.commit()
+        
+        return {"url": url, "status": "success"}
+    except Exception as e:
+        db.rollback()
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 class LoginRequest(BaseModel):
     email: str
@@ -531,13 +581,65 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
 @app.patch("/api/students/{student_id}")
 def update_student(student_id: str, student: StudentUpdate, db: Session = Depends(get_db)):
     try:
-        query = text("UPDATE students SET is_active = :is_active WHERE id = CAST(:student_id AS uuid)")
-        db.execute(query, {"is_active": student.is_active, "student_id": student_id})
+        update_data = student.model_dump(exclude_unset=True)
+        if not update_data:
+            return {"message": "No changes"}
+            
+        set_clauses = []
+        params = {"student_id": student_id}
+        
+        for key, value in update_data.items():
+            if key == "department_id":
+                set_clauses.append(f"{key} = CAST(:{key} AS uuid)")
+            else:
+                set_clauses.append(f"{key} = :{key}")
+            params[key] = value
+            
+        query = text(f"UPDATE students SET {', '.join(set_clauses)} WHERE id = CAST(:student_id AS uuid)")
+        db.execute(query, params)
         db.commit()
         return {"message": "Success"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.post("/api/students/{student_id}/photo")
+async def update_student_photo(student_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        # 1. Sauvegarder le fichier
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        url = f"http://localhost:8000/uploads/{unique_filename}"
+        
+        # 2. Recalculer l'embedding
+        encoding = compute_face_encoding(file_path)
+        encoding_json = json.dumps(encoding) if encoding else None
+        
+        # 3. Mettre à jour la base
+        query = text("""
+            UPDATE students 
+            SET photo_url = :photo_url, 
+                face_encoding = CAST(:face_encoding AS jsonb),
+                face_embedding = CAST(:face_embedding AS float[])
+            WHERE id = CAST(:id AS uuid)
+        """)
+        db.execute(query, {
+            "photo_url": url,
+            "face_encoding": encoding_json,
+            "face_embedding": encoding,
+            "id": student_id
+        })
+        db.commit()
+        
+        return {"url": url, "status": "success"}
+    except Exception as e:
+        db.rollback()
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/students/{student_id}")
 def delete_student(student_id: str, db: Session = Depends(get_db)):
@@ -763,7 +865,7 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
             
         # 2. Vérifier si une session existe déjà aujourd'hui
         session_query = text("""
-            SELECT id, course_name, group_name, classroom, session_date, is_active, start_time, end_time
+            SELECT id, course_name, group_name, classroom, session_date, is_active, start_time, end_time, is_paused
             FROM sessions 
             WHERE course_name = :name AND group_name = :group AND session_date = :date AND classroom = :room
         """)
@@ -783,7 +885,8 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
                 "session_date": str(existing[4]),
                 "is_active": existing[5],
                 "start_time": str(existing[6]) if existing[6] else None,
-                "end_time": str(existing[7]) if existing[7] else None
+                "end_time": str(existing[7]) if existing[7] else None,
+                "is_paused": existing[8]
             }
             
         # 3. Créer la session si elle n'existe pas
@@ -859,18 +962,20 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
     if not student_row:
         raise HTTPException(status_code=404, detail="Étudiant introuvable")
     
+    row_dict = student_row._mapping
+    
     student_data = {
-        "id": str(student_row[0]),
-        "name": student_row[1],
-        "email": student_row[2],
-        "code": student_row[3],
-        "filiere": student_row[4],
-        "group": student_row[5],
-        "photo_url": student_row[6]
+        "id": str(row_dict["id"]),
+        "name": row_dict["full_name"],
+        "email": row_dict["email"],
+        "code": row_dict["student_code"],
+        "filiere": row_dict["filiere"],
+        "group": row_dict["group_name"],
+        "photo_url": row_dict["photo_url"]
     }
     
-    dept_id = student_row[7]
-    group_name = student_row[5] or ''
+    dept_id = str(row_dict["department_id"]) if row_dict["department_id"] else None
+    group_name = row_dict["group_name"] or ''
 
     # 1.5 Fetch all modules/courses assigned to this student
     # Si l'étudiant n'a pas de département (:dept_id IS NULL), on lui assigne tous les cours par défaut (Informatique)
@@ -889,10 +994,11 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
     ambiguous_names = set(all_names) & set(grp_names)
 
     for c in assigned_courses:
-        course_name = c[0]
-        grp = c[5] or 'ALL'
-        teacher = c[6] or ''
-        course_type = c[7] or 'Cours'
+        c_map = c._mapping
+        course_name = c_map["name"]
+        grp = c_map["group_name"] or 'ALL'
+        teacher = c_map["teacher_name"] or ''
+        course_type = c_map["course_type"] or 'Cours'
 
         # Utiliser le type officiel du cours pour le libellé
         # N'ajouter le suffixe que s'il y a ambiguïté avec un même nom en plusieurs types
@@ -907,10 +1013,10 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
             "name": display_name, 
             "presences": 0, 
             "absences": 0, 
-            "threshold": c[1] or 3,
-            "schedule_day": c[2] or "",
-            "schedule_time": c[3] or "",
-            "room": c[4] or "",
+            "threshold": c_map["absence_threshold"] or 3,
+            "schedule_day": c_map["schedule_day"] or "",
+            "schedule_time": c_map["schedule_time"] or "",
+            "room": c_map["room"] or "",
             "teacher": teacher,
             "course_type": course_type
         }
@@ -983,13 +1089,13 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
     attendance_rate = round((total_attended / total_sessions * 100)) if total_sessions > 0 else 100
     
     stats_data = {
-        "attendanceRate": attendance_rate,
-        "presentCount": present_count,
-        "absentCount": absent_count,
-        "lateCount": late_count,
-        "excusedCount": excused_count,
-        "totalSessions": total_sessions,
-        "totalCourses": len(modules_stats),
+        "attendance_rate": attendance_rate,
+        "total_presences": present_count,
+        "total_absences": absent_count,
+        "total_late": late_count,
+        "total_excused": excused_count,
+        "total_sessions": total_sessions,
+        "total_courses": len(modules_stats),
         "modules": list(modules_stats.values()),
         "history": history_data
     }
@@ -998,6 +1104,10 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
         "student": student_data,
         "stats": stats_data
     }
+
+@app.get("/api/students/{student_id}/stats")
+def get_student_stats_alias(student_id: str, db: Session = Depends(get_db)):
+    return get_student_full_stats(student_id, db)
 
 @app.get("/api/sessions")
 def get_sessions(db: Session = Depends(get_db)):
@@ -1097,42 +1207,53 @@ def get_session_attendance(session_id: str, db: Session = Depends(get_db)):
     try:
         # Get session details
         session_query = text("""
-            SELECT s.id, s.course_name, s.group_name, s.session_date::text, t.name as teacher_name
+            SELECT s.id, s.course_name, s.group_name, s.session_date::text, t.name as teacher_name, s.classroom, s.start_time::text, s.status
             FROM sessions s JOIN teachers t ON s.teacher_id = t.id
             WHERE s.id = :sid
         """)
-        session_row = db.execute(session_query, {"sid": session_id}).fetchone()
+        session_row = db.execute(session_query, {"sid": int(session_id)}).fetchone()
         
         if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
             
         group_name = session_row[2]
         
-        # Get students for this group
-        students_query = text("""
-            SELECT id, student_code, full_name, photo_url, matricule, group_name 
-            FROM students WHERE group_name = :group_name OR group_name IS NULL
-        """)
-        students_result = db.execute(students_query, {"group_name": group_name}).fetchall()
+        # Get students for this group (including students without group if it's an 'ALL' or similar session)
+        if group_name in ('ALL', '', None):
+            students_query = text("""
+                SELECT id, student_code, full_name, photo_url, matricule, group_name 
+                FROM students ORDER BY full_name
+            """)
+            students_result = db.execute(students_query).fetchall()
+        else:
+            students_query = text("""
+                SELECT id, student_code, full_name, photo_url, matricule, group_name 
+                FROM students WHERE group_name = :group_name OR group_name IS NULL
+                ORDER BY full_name
+            """)
+            students_result = db.execute(students_query, {"group_name": group_name}).fetchall()
         
         # Get attendance records for this session
         records_query = text("""
-            SELECT student_id, status FROM attendance_records WHERE session_id = CAST(:sid AS uuid)
+            SELECT student_id, status, marked_at::text FROM attendance_records WHERE session_id = :sid
         """)
-        # Skip this query for now since we mapped this custom flow for a newly created session table
-        # Let's use a simpler mapping to avoid exact UUID typing issues if 'sessions.id' is integer
+        records_result = db.execute(records_query, {"sid": int(session_id)}).fetchall()
+        attendance_map = {str(r[0]): {"status": r[1], "marked_at": r[2]} for r in records_result}
         
         student_list = []
         for s in students_result:
+            s_id = str(s[0])
+            att = attendance_map.get(s_id, {"status": None, "marked_at": None})
             student_list.append({
-                "id": str(s[0]),
+                "id": s_id,
                 "student_code": s[1],
                 "full_name": s[2],
                 "name": s[2],
                 "photo_url": s[3],
                 "matricule": s[4],
                 "group_name": s[5],
-                "status": None
+                "status": att["status"],
+                "marked_at": att["marked_at"]
             })
             
         return {
@@ -1141,12 +1262,17 @@ def get_session_attendance(session_id: str, db: Session = Depends(get_db)):
                 "course_name": session_row[1],
                 "group_name": session_row[2],
                 "session_date": session_row[3],
-                "teacher_name": session_row[4]
+                "teacher_name": session_row[4],
+                "classroom": session_row[5],
+                "start_time": session_row[6],
+                "status": session_row[7]
             },
             "students": student_list
         }
     except Exception as e:
         db.rollback()
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.patch("/api/sessions/{session_id}")
@@ -1410,6 +1536,19 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
         print(traceback.format_exc())
         return {"match": False, "error": str(e), "status": "error"}
 
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    try:
+        # 1. Supprimer les records de présence liés
+        db.execute(text("DELETE FROM attendance_records WHERE session_id = :sid"), {"sid": session_id})
+        # 2. Supprimer la session
+        db.execute(text("DELETE FROM sessions WHERE id = :sid"), {"sid": session_id})
+        db.commit()
+        return {"status": "success", "message": "Session supprimée"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ─── Absence Alerts ───────────────────────────────────────────────────────────
 
 @app.get("/api/alerts")
@@ -1515,6 +1654,9 @@ def get_dashboard(db: Session = Depends(get_db)):
         r = db.execute(text("SELECT COUNT(*) FROM students WHERE is_active = true")).fetchone()
         stats["totalStudents"] = r[0]
 
+        r = db.execute(text("SELECT COUNT(*) FROM teachers")).fetchone()
+        stats["totalTeachers"] = r[0]
+
         r = db.execute(text("SELECT COUNT(*) FROM courses")).fetchone()
         stats["totalCourses"] = r[0]
 
@@ -1528,17 +1670,25 @@ def get_dashboard(db: Session = Depends(get_db)):
         )).fetchone()
         stats["activeAlerts"] = r[0]
 
-        r = db.execute(text(
-            "SELECT COUNT(*) FROM attendance_records WHERE status = 'present'"
-        )).fetchone()
+        r = db.execute(text("""
+            SELECT COUNT(*) FROM attendance_records ar
+            JOIN sessions s ON ar.session_id = s.id
+            WHERE ar.status = 'present' AND s.session_date = CAST(:d AS date)
+        """), {"d": today}).fetchone()
         stats["presentToday"] = r[0]
 
-        r = db.execute(text(
-            "SELECT COUNT(*) FROM attendance_records WHERE status = 'absent'"
-        )).fetchone()
+        r = db.execute(text("""
+            SELECT COUNT(*) FROM attendance_records ar
+            JOIN sessions s ON ar.session_id = s.id
+            WHERE ar.status = 'absent' AND s.session_date = CAST(:d AS date)
+        """), {"d": today}).fetchone()
         stats["absentToday"] = r[0]
 
-        r = db.execute(text("SELECT COUNT(*) FROM attendance_records")).fetchone()
+        r = db.execute(text("""
+            SELECT COUNT(*) FROM attendance_records ar
+            JOIN sessions s ON ar.session_id = s.id
+            WHERE s.session_date = CAST(:d AS date)
+        """), {"d": today}).fetchone()
         total = r[0] or 1
         rate = round((stats["presentToday"] / total) * 100)
         stats["attendanceRate"] = rate
