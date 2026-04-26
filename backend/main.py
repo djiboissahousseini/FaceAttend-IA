@@ -1337,33 +1337,82 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
         students_result = db.execute(students_query, {"cid": course_id}).fetchall()
         
         # 3. Fallback to group if no enrollments
-        if not students_result:
-            if group_name == 'ALL':
-                students_query = text("SELECT id, student_code, full_name, photo_url, matricule, group_name FROM students ORDER BY full_name")
-                students_result = db.execute(students_query).fetchall()
-            else:
-                students_query = text("""
-                    SELECT id, student_code, full_name, photo_url, matricule, group_name 
-                    FROM students 
-                    WHERE LTRIM(TRIM(UPPER(REPLACE(REPLACE(group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group
-                    OR group_name IS NULL
-                    ORDER BY full_name
-                """)
-                students_result = db.execute(students_query, {"norm_group": norm_group}).fetchall()
+        # 4. Final Query with Stats
+        # We calculate absence_count and check for active alerts
+        final_query = text("""
+            SELECT 
+                s.id, s.student_code, s.full_name, s.photo_url, s.matricule, s.group_name,
+                COUNT(ar.id) FILTER (WHERE ar.status = 'Absent') as absence_count,
+                COUNT(ar.id) FILTER (WHERE ar.status IN ('Present', 'Late')) as presence_count,
+                MAX(aa.threshold) as absence_threshold,
+                MAX(aa.status) as alert_status
+            FROM students s
+            LEFT JOIN attendance_records ar ON s.id = ar.student_id 
+                AND ar.session_id IN (SELECT id FROM sessions WHERE course_name = :cname)
+            LEFT JOIN absence_alerts aa ON s.id = aa.student_id AND aa.course_id = :cid
+            WHERE s.id IN :sids
+            GROUP BY s.id
+            ORDER BY absence_count DESC, s.full_name
+        """)
         
+        student_ids = [r[0] for r in students_result]
+        if not student_ids:
+            return []
+            
+        stats_result = db.execute(final_query, {
+            "cname": course_row[1],
+            "cid": course_id,
+            "sids": tuple(student_ids)
+        }).fetchall()
+
         return [
             {
-                "id": str(s[0]),
-                "student_code": s[1],
-                "full_name": s[2],
-                "photo_url": s[3],
-                "matricule": s[4],
-                "group_name": s[5]
-            } for s in students_result
+                "id": str(r[0]),
+                "student_code": r[1],
+                "full_name": r[2],
+                "photo_url": r[3],
+                "matricule": r[4],
+                "group_name": r[5],
+                "absence_count": r[6] or 0,
+                "presence_count": r[7] or 0,
+                "absence_threshold": r[8] or 3,
+                "alert_status": r[9] or "Normal",
+                "risk_level": "CRITICAL" if (r[6] or 0) >= (r[8] or 3) else "WARNING" if (r[6] or 0) >= (r[8] or 3) - 1 else "SAFE"
+            } for r in stats_result
         ]
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.get("/api/teachers/{teacher_id}/alerts")
+def get_teacher_alerts(teacher_id: int, db: Session = Depends(get_db)):
+    try:
+        query = text("""
+            SELECT aa.id, aa.absence_count, aa.threshold, aa.status, aa.generated_at,
+                   s.full_name as student_name, s.photo_url as student_photo,
+                   c.name as course_name
+            FROM absence_alerts aa
+            JOIN students s ON aa.student_id = s.id
+            JOIN courses c ON aa.course_id = c.id
+            WHERE c.teacher_name = (SELECT name FROM teachers WHERE id = :tid)
+            AND aa.status = 'active'
+            ORDER BY aa.generated_at DESC
+        """)
+        result = db.execute(query, {"tid": teacher_id}).fetchall()
+        return [
+            {
+                "id": str(r[0]),
+                "absence_count": r[1],
+                "threshold": r[2],
+                "status": r[3],
+                "generated_at": r[4].isoformat() if r[4] else None,
+                "student_name": r[5],
+                "student_photo": r[6],
+                "course_name": r[7]
+            } for r in result
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/sessions/{session_id}")
 def update_session(session_id: int, session: SessionUpdate, db: Session = Depends(get_db)):
@@ -1389,16 +1438,6 @@ def update_session(session_id: int, session: SessionUpdate, db: Session = Depend
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-@app.delete("/api/sessions/{session_id}")
-def delete_session(session_id: int, db: Session = Depends(get_db)):
-    try:
-        query = text("DELETE FROM sessions WHERE id = :sid")
-        db.execute(query, {"sid": session_id})
-        db.commit()
-        return {"message": "Session supprimée avec succès"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.get("/api/records")
 def get_all_records(db: Session = Depends(get_db)):
@@ -1496,7 +1535,7 @@ def sync_student_alerts(student_id: str, session_id: int, db: Session):
             JOIN sessions s ON ar.session_id = s.id
             WHERE ar.student_id = CAST(:sid AS uuid) 
               AND s.course_name = :cname 
-              AND ar.status = 'absent'
+              AND ar.status IN ('Absent', 'absent')
         """)
         abs_count = db.execute(abs_query, {"sid": student_id, "cname": c_name}).scalar()
         
@@ -1659,15 +1698,18 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: int, db: Session = Depends(get_db)):
     try:
-        # 1. Supprimer les records de présence liés
+        # 1. Supprimer les records de présence liés pour éviter les erreurs de clé étrangère
         db.execute(text("DELETE FROM attendance_records WHERE session_id = :sid"), {"sid": session_id})
-        # 2. Supprimer la session
-        db.execute(text("DELETE FROM sessions WHERE id = :sid"), {"sid": session_id})
+        
+        # 2. Supprimer la session proprement
+        query = text("DELETE FROM sessions WHERE id = :sid")
+        result = db.execute(query, {"sid": session_id})
+        
         db.commit()
-        return {"status": "success", "message": "Session supprimée"}
+        return {"status": "success", "message": "Session supprimée catégoriquement de la base de données"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 # ─── Absence Alerts ───────────────────────────────────────────────────────────
 

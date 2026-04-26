@@ -79,13 +79,14 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
+  const [activeTab, setActiveTab] = useState<'live' | 'master' | 'alerts'>('live');
   const [activeClassroom, setActiveClassroom] = useState<string>('Salle B1');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [classrooms, setClassrooms] = useState<string[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [courseStudents, setCourseStudents] = useState<any[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [absenceAlerts, setAbsenceAlerts] = useState<any[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -279,6 +280,17 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       setStats(dashboardStats as DashboardStats);
       setAllCourses(Array.isArray(courseData) ? (courseData as Course[]) : []);
       setAllSessions(Array.isArray(sessionData) ? (sessionData as Session[]) : []);
+
+      // Load specific teacher alerts
+      try {
+        const alertsRes = await fetch(`${API_URL}/api/teachers/${loggedInTeacher.id}/alerts`);
+        if (alertsRes.ok) {
+          const alertsData = await alertsRes.json();
+          setAbsenceAlerts(alertsData);
+        }
+      } catch (err) {
+        console.error("Alerts Load Error:", err);
+      }
       
       if (Array.isArray(roomsData) && roomsData.length > 0) {
         setClassrooms(roomsData);
@@ -660,6 +672,15 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                 >
                   <BookOpen size={14} /> Agenda Master
                 </button>
+                <button
+                  onClick={() => setActiveTab('alerts')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'alerts' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <AlertCircle size={14} /> Alertes IA
+                  {absenceAlerts.length > 0 && (
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                  )}
+                </button>
               </div>
 
               <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
@@ -692,6 +713,30 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                               <PlayCircle size={20} />
                             </button>
                           )}
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : activeTab === 'alerts' ? (
+                  absenceAlerts.length === 0 ? (
+                    <div className="py-20 text-center space-y-4">
+                      <ShieldCheck size={48} className="mx-auto text-emerald-100" />
+                      <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucune alerte critique détectée</p>
+                    </div>
+                  ) : (
+                    absenceAlerts.map(a => (
+                      <div key={a.id} className="p-6 flex items-start gap-4 hover:bg-red-50/30 transition-colors border-l-4 border-red-500">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0">
+                          <img src={getPhotoUrl(a.student_photo)} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black text-slate-900">{a.student_name}</p>
+                          <p className="text-[10px] text-red-600 font-bold uppercase">{a.course_name}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">{new Date(a.generated_at).toLocaleDateString()} à {new Date(a.generated_at).toLocaleTimeString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black text-red-600">{a.absence_count}</p>
+                          <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
                         </div>
                       </div>
                     ))
@@ -811,10 +856,22 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-slate-800 truncate">{s.full_name}</p>
-                        <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
+                          <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
+                            s.risk_level === 'CRITICAL' ? 'bg-red-100 text-red-600 animate-pulse' :
+                            s.risk_level === 'WARNING' ? 'bg-amber-100 text-amber-600' :
+                            'bg-emerald-100 text-emerald-600'
+                          }`}>
+                            {s.risk_level}
+                          </span>
+                        </div>
                       </div>
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ShieldCheck size={16} />
+                      <div className="text-right">
+                        <p className={`text-xs font-black ${s.absence_count >= s.absence_threshold ? 'text-red-500' : 'text-slate-800'}`}>
+                          {s.absence_count}/{s.absence_threshold}
+                        </p>
+                        <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
                       </div>
                     </div>
                   ))}

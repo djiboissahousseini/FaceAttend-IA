@@ -720,11 +720,78 @@ export default function Attendance() {
           </div>
 
           <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+            {/* LIVE CONTROL PANEL (ACTIVE ON CAMERA) */}
+            {activeTab === 'live' && (
+              <div className="mb-6">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 px-1">
+                  Flux Caméra Actif
+                </h3>
+                {sessions.find(s => s.status === 'active' && s.classroom === activeClassroom) ? (
+                  sessions
+                    .filter(s => s.status === 'active' && s.classroom === activeClassroom)
+                    .map(s => (
+                      <div 
+                        key={s.id}
+                        className="bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden group transition-all"
+                      >
+                        <div className="relative z-10">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full">
+                              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                              <span className="text-[10px] font-black uppercase">EN COURS D'ENREGISTREMENT</span>
+                            </div>
+                            <button 
+                              onClick={() => cancelActiveSession(s.id)}
+                              className="w-10 h-10 rounded-full bg-white/10 hover:bg-red-500 flex items-center justify-center transition-all group/btn"
+                              title="Arrêter la session"
+                            >
+                              <PowerOff size={18} className="group-hover/btn:scale-110 transition-transform" />
+                            </button>
+                          </div>
+                          
+                          <h4 className="text-xl font-black mb-1">{s.course_name}</h4>
+                          <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-4">
+                            PROF: {s.teacher_name} • GRP {s.group_name}
+                          </p>
+
+                          <div className="flex gap-4">
+                            <div className="bg-white/10 px-4 py-2 rounded-2xl">
+                              <p className="text-[8px] text-emerald-200 font-bold uppercase">Débuté à</p>
+                              <p className="text-sm font-black">{s.start_time}</p>
+                            </div>
+                            <div className="bg-white/10 px-4 py-2 rounded-2xl">
+                              <p className="text-[8px] text-emerald-200 font-bold uppercase">Lieu</p>
+                              <p className="text-sm font-black">{s.classroom}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <Video size={140} className="absolute -bottom-10 -right-10 text-white/5 -rotate-12 group-hover:rotate-0 transition-all duration-700" />
+                      </div>
+                    ))
+                ) : (
+                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center">
+                    <MonitorPlay size={32} className="mx-auto text-slate-300 mb-3 opacity-50" />
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                      Aucune session active sur la caméra.<br/>L'IA lancera automatiquement le prochain cours prévu.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* UPCOMING / OTHER SESSIONS */}
+            {activeTab === 'live' && (
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 px-1">
+                Agenda de la Journée
+              </h3>
+            )}
+
             {activeTab === 'live' ? (
               sessions
                 .filter((s) => 
                   s.classroom === activeClassroom && 
-                  (s.status === 'active' || s.session_date === new Date().toISOString().split('T')[0])
+                  s.status !== 'active' &&
+                  (s.session_date === new Date().toISOString().split('T')[0])
                 )
                 .sort((a, b) => {
                   // Active sessions first
@@ -789,32 +856,25 @@ export default function Attendance() {
 
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                       {s.status === 'scheduled' && (
-                        <>
-                          <button
-                            onClick={() => launchExistingSession(Number(s.id))}
-                            className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors shadow-sm"
-                            title="Lancer maintenant"
-                          >
-                            <Play size={14} />
-                          </button>
-                          <button
-                            onClick={() => deleteSession(Number(s.id))}
-                            className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors shadow-sm"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
+                        <button
+                          onClick={() => launchExistingSession(Number(s.id))}
+                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors shadow-sm"
+                          title="Lancer maintenant"
+                        >
+                          <Play size={14} />
+                        </button>
                       )}
+                      
                       {s.status === 'active' && (
                         <button
                           onClick={() => cancelActiveSession(s.id)}
-                          className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                          className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors shadow-sm"
                           title="Arrêter la session"
                         >
                           <XCircle size={14} />
                         </button>
                       )}
+
                       {s.status === 'closed' && (
                         <button
                           onClick={async () => {
@@ -825,12 +885,20 @@ export default function Attendance() {
                             });
                             fetchSessions();
                           }}
-                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors shadow-sm"
                           title="Rétablir la session"
                         >
                           <RefreshCw size={14} />
                         </button>
                       )}
+
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteSession(Number(s.id)); }}
+                        className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors shadow-sm"
+                        title="Supprimer catégoriquement de la base"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 ))
