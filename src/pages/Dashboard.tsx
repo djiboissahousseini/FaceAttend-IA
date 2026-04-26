@@ -211,11 +211,24 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 pb-12">
       {/* Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Étudiants" value={stats.totalStudents} icon={<Users size={18}/>} color="blue" subtitle="Total" />
         <StatCard title="Enseignants" value={stats.totalTeachers} icon={<GraduationCap size={18}/>} color="slate" subtitle="Actifs" />
-        <StatCard title="Cours Aujourd'hui" value={stats.todaySessions} icon={<BookOpenCheck size={18}/>} color="green" subtitle="Programmés" />
-        <StatCard title="Assiduité" value={`${stats.attendanceRate}%`} icon={<UserCheck size={18}/>} color="red" subtitle="Moyenne globale" />
+        <StatCard title="Cours" value={stats.todaySessions} icon={<BookOpenCheck size={18}/>} color="green" subtitle="Aujourd'hui" />
+        <StatCard title="Assiduité" value={`${stats.attendanceRate}%`} icon={<UserCheck size={18}/>} color="orange" subtitle="Moyenne" />
+        <div className="bg-white p-5 rounded-3xl border border-red-100 shadow-sm relative overflow-hidden group">
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">Alertes IA</p>
+            <div className="p-2 bg-red-50 text-red-500 rounded-xl group-hover:scale-110 transition-transform">
+              <ShieldAlert size={18}/>
+            </div>
+          </div>
+          <p className="text-3xl font-black text-slate-800 relative z-10">Critique</p>
+          <p className="text-[10px] text-red-500 font-bold mt-1 relative z-10 uppercase tracking-tighter">Seuil d'absences atteint</p>
+          <div className="absolute -bottom-4 -right-4 text-red-500/5 rotate-12 group-hover:rotate-0 transition-all duration-700">
+            <AlertCircle size={80} />
+          </div>
+        </div>
       </div>
 
       {/* Présents / Absents */}

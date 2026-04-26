@@ -724,22 +724,34 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                       <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucune alerte critique détectée</p>
                     </div>
                   ) : (
-                    absenceAlerts.map(a => (
-                      <div key={a.id} className="p-6 flex items-start gap-4 hover:bg-red-50/30 transition-colors border-l-4 border-red-500">
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0">
-                          <img src={getPhotoUrl(a.student_photo)} alt="" className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-black text-slate-900">{a.student_name}</p>
-                          <p className="text-[10px] text-red-600 font-bold uppercase">{a.course_name}</p>
-                          <p className="text-[10px] text-slate-400 mt-1">{new Date(a.generated_at).toLocaleDateString()} à {new Date(a.generated_at).toLocaleTimeString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-black text-red-600">{a.absence_count}</p>
-                          <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
-                        </div>
+                    <div className="space-y-1">
+                      <div className="px-6 py-2 bg-red-50/50 border-b border-red-100">
+                        <p className="text-[9px] font-black text-red-600 uppercase tracking-[0.2em]">
+                          Seuil de Surveillance : {(absenceAlerts[0]?.threshold || 5)} Absences
+                        </p>
                       </div>
-                    ))
+                      {absenceAlerts.map(a => (
+                        <div key={a.id} className="p-6 flex items-start gap-4 hover:bg-red-50/30 transition-colors border-l-4 border-red-500 bg-white">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
+                            <img src={getPhotoUrl(a.student_photo)} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-black text-slate-900">{a.student_name}</p>
+                              <span className="text-[7px] bg-red-600 text-white px-1.5 py-0.5 rounded font-black uppercase animate-pulse">
+                                Risque Exclusion
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-red-600 font-bold uppercase mt-0.5">{a.course_name}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">{new Date(a.generated_at).toLocaleDateString()} à {new Date(a.generated_at).toLocaleTimeString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-black text-red-600 leading-none">{a.absence_count}</p>
+                            <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">/{a.threshold || 5} Abs</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )
                 ) : (
                   myCourses.length === 0 ? (
@@ -859,17 +871,18 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                         <div className="flex items-center gap-2">
                           <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
                           <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
-                            s.risk_level === 'CRITICAL' ? 'bg-red-100 text-red-600 animate-pulse' :
-                            s.risk_level === 'WARNING' ? 'bg-amber-100 text-amber-600' :
+                            s.absence_count >= (s.absence_threshold || 5) ? 'bg-red-100 text-red-600 animate-pulse' :
+                            s.absence_count >= (s.absence_threshold || 5) - 1 ? 'bg-amber-100 text-amber-600' :
                             'bg-emerald-100 text-emerald-600'
                           }`}>
-                            {s.risk_level}
+                            {s.absence_count >= (s.absence_threshold || 5) ? 'CRITICAL' : 
+                             s.absence_count >= (s.absence_threshold || 5) - 1 ? 'WARNING' : 'SAFE'}
                           </span>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`text-xs font-black ${s.absence_count >= s.absence_threshold ? 'text-red-500' : 'text-slate-800'}`}>
-                          {s.absence_count}/{s.absence_threshold}
+                        <p className={`text-xs font-black ${s.absence_count >= (s.absence_threshold || 5) ? 'text-red-500' : 'text-slate-800'}`}>
+                          {s.absence_count}/{s.absence_threshold || 5}
                         </p>
                         <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
                       </div>
