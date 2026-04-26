@@ -19,6 +19,7 @@ export default function Courses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [classrooms, setClassrooms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -49,10 +50,11 @@ export default function Courses() {
     setLoading(true);
     setError(null);
     try {
-      const [coursesRes, deptsRes, teachersRes, enrollRes] = await Promise.all([
+      const [coursesRes, deptsRes, teachersRes, roomsRes, enrollRes] = await Promise.all([
         fetch(`${API}/api/courses`).then((r) => r.json()),
         fetch(`${API}/api/departments`).then((r) => r.json()),
         fetch(`${API}/api/teachers`).then((r) => r.json()),
+        fetch(`${API}/api/classrooms`).then((r) => r.json()),
         fetch(`${API}/api/enrollments`)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
@@ -60,6 +62,7 @@ export default function Courses() {
       setCourses(coursesRes ?? []);
       setDepartments(deptsRes ?? []);
       setTeachers(teachersRes ?? []);
+      setClassrooms(roomsRes ?? []);
       // Compter les inscriptions par cours
       const counts: Record<string, number> = {};
       if (Array.isArray(enrollRes)) {
@@ -202,10 +205,12 @@ export default function Courses() {
     ECO: 'bg-cyan-100 text-cyan-700',
   };
 
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 items-center">
+        <div className="relative flex-1 w-full">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -215,9 +220,25 @@ export default function Courses() {
             className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
           />
         </div>
+        
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+          >
+            Grille
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+          >
+            Tableau
+          </button>
+        </div>
+
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-xl transition-colors shrink-0"
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-xl transition-colors shrink-0 w-full sm:w-auto justify-center"
         >
           <Plus size={16} />
           Ajouter Cours
@@ -230,7 +251,7 @@ export default function Courses() {
         <div className="flex items-center justify-center py-16 text-slate-400">
           <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((course) => {
             const deptCode = (course.departments as { code?: string })?.code ?? '';
@@ -318,6 +339,81 @@ export default function Courses() {
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Code</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Enseignant</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-blue-500">Salle</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Groupe</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Horaire</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((course) => (
+                  <tr key={course.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                        {course.course_code}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <BookOpen size={14} className="text-blue-500" />
+                        </div>
+                        <span className="text-sm font-bold text-slate-800">{course.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-xs text-slate-600">{course.teacher_name}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={12} className="text-blue-400" />
+                        <span className="text-xs font-black text-blue-600">{course.room || '---'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-[10px] font-black bg-slate-900 text-white px-2 py-1 rounded">
+                        {course.group_name === 'ALL' ? 'TOUS LES GROUPES' : `GRP ${course.group_name}`}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700">{course.schedule_day}</span>
+                        <span className="text-[10px] text-slate-400">{course.schedule_time}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleLaunchSession(course)}
+                          className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-lg transition-all"
+                          title="Lancer Session"
+                        >
+                          <Activity size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(course)}
+                          className="p-2 bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-all"
+                          title="Modifier"
+                        >
+                          <Clock size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -470,13 +566,24 @@ export default function Courses() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">Salle</label>
-                  <input
-                    type="text"
-                    value={form.room}
-                    onChange={(e) => setForm({ ...form, room: e.target.value })}
-                    placeholder="Salle A101"
-                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-                  />
+                  <div className="relative">
+                    <select
+                      value={form.room}
+                      onChange={(e) => setForm({ ...form, room: e.target.value })}
+                      className="w-full appearance-none px-3 pr-8 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
+                    >
+                      <option value="">Sélectionner une salle...</option>
+                      {classrooms.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">Groupe</label>
@@ -485,7 +592,7 @@ export default function Courses() {
                     onChange={(e) => setForm({ ...form, group_name: e.target.value })}
                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                   >
-                    <option value="ALL">Tous les Groupes (Amphi)</option>
+                    <option value="ALL">Tous les Groupes</option>
                     <option value="01">Groupe 01</option>
                     <option value="02">Groupe 02</option>
                     <option value="03">Groupe 03</option>

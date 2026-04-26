@@ -209,6 +209,7 @@ class AlertUpdate(BaseModel):
 class RecognizeRequest(BaseModel):
     image: str
     target_type: Optional[str] = "student" # "student" or "teacher"
+    liveness_enabled: bool = True
 
 # ─── File Upload ─────────────────────────────────────────────────────────────
 
@@ -230,13 +231,8 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/api/classrooms")
 def get_classrooms(db: Session = Depends(get_db)):
     try:
-        # On ne prend que les salles définies dans l'emploi du temps (courses)
-        # On exclut 'B5' qui n'est pas une salle selon le feedback utilisateur
-        query = text("""
-            SELECT DISTINCT room FROM courses 
-            WHERE room IS NOT NULL AND room != '' AND room != 'B5'
-            ORDER BY room
-        """)
+        # On utilise maintenant la table dédiée 'classrooms' pour une structure parfaite
+        query = text("SELECT name FROM classrooms ORDER BY name")
         rows = db.execute(query).fetchall()
         return [r[0] for r in rows]
     except Exception as e:
@@ -1474,7 +1470,7 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
             f.write(data)
 
         # Liveness Detection Check
-        if not check_liveness(temp_path):
+        if request.liveness_enabled and not check_liveness(temp_path):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             return {"match": False, "message": "Échec Liveness (Image floue/suspecte)", "status": "liveness_failed"}

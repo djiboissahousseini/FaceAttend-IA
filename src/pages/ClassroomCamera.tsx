@@ -28,6 +28,7 @@ type ScanStatus =
   | 'wrong_group'
   | 'unknown'
   | 'liveness_failed'
+  | 'paused'
   | 'error';
 
 import { API_URL } from '../config';
@@ -49,6 +50,9 @@ export default function ClassroomCamera() {
   const [isForcedSession, setIsForcedSession] = useState(false);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+
+  const [livenessEnabled, setLivenessEnabled] = useState(true);
+  const [autoTracking, setAutoTracking] = useState(true);
 
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -104,7 +108,7 @@ export default function ClassroomCamera() {
       const res = await fetch(`${API}/api/sessions/${activeSession.id}/recognize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image, target_type: targetType }),
+        body: JSON.stringify({ image, target_type: targetType, liveness_enabled: livenessEnabled }),
       });
       const data = await res.json();
 
@@ -180,6 +184,7 @@ export default function ClassroomCamera() {
           switch (data.command) {
             case 'OVERRIDE_TEACHER':
               if (status === 'ready_teacher' || status === 'standby') {
+                setIgnoredSessionId(null); // Permettre la reprise si on force l'accès
                 setIsTeacherUnlocked(true);
                 setStatus('ready');
                 setResult({ message: 'ACCÈS ADMIN' });
@@ -191,12 +196,32 @@ export default function ClassroomCamera() {
               window.location.reload();
               break;
 
+            case 'FORCE_STANDBY': {
+              const sid = data.payload?.session_id || activeSession?.id;
+              if (sid) setIgnoredSessionId(sid.toString());
+              setActiveSession(null);
+              setIsTeacherUnlocked(false);
+              setIsForcedSession(false);
+              setStatus('standby');
+              break;
+            }
+
+            case 'PAUSE_SESSION':
+              setStatus((prev) => {
+                if (prev === 'paused') {
+                  return isTeacherUnlocked ? 'ready' : 'ready_teacher';
+                }
+                return 'paused';
+              });
+              break;
+
             case 'FORCE_START_SESSION': {
               const fetchSessionToForce = async () => {
                 try {
                   const res = await fetch(`${API}/api/sessions/${data.payload.session_id}`);
                   if (!res.ok) throw new Error('Session non trouvée');
                   const target: Session = await res.json();
+                  setIgnoredSessionId(null); // Reset block
                   setActiveSession(target);
                   setIsTeacherUnlocked(false);
                   setIsForcedSession(true);
@@ -208,6 +233,12 @@ export default function ClassroomCamera() {
               fetchSessionToForce();
               break;
             }
+            case 'TOGGLE_LIVENESS':
+              setLivenessEnabled(data.payload.enabled);
+              break;
+            case 'TOGGLE_AUTO_TRACKING':
+              setAutoTracking(data.payload.enabled);
+              break;
           }
         } catch (err) {
           console.error('Invalid command format', err);
@@ -229,6 +260,7 @@ export default function ClassroomCamera() {
     let isMounted = true;
     
     const checkActiveSession = async () => {
+      if (!autoTracking) return; // Suivi IA désactivé : on ne cherche pas de cours automatiquement
       try {
         const res = await fetch(`${API}/api/sessions/active?room=${encodeURIComponent(classroom)}`);
         if (!res.ok) {
@@ -241,6 +273,9 @@ export default function ClassroomCamera() {
         if (!isMounted) return;
 
         if (currentSession && currentSession.id) {
+          // Skip if this session was explicitly closed/ignored by admin
+          if (ignoredSessionId === currentSession.id.toString()) return;
+
           setActiveSession(prev => {
             // Update only if it's a new session
             if (!prev || prev.id !== currentSession.id) {
@@ -268,7 +303,7 @@ export default function ClassroomCamera() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [classroom, isForcedSession]);
+  }, [classroom, ignoredSessionId, isForcedSession, autoTracking]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -412,6 +447,30 @@ export default function ClassroomCamera() {
           </div>
         </div>
 
+        {/* STATUS INDICATORS (TOP CENTER) */}
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
+          <div
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${
+              livenessEnabled
+                ? 'border-[#00ff9d] text-[#00ff9d] bg-[#00ff9d]/10 shadow-[0_0_10px_rgba(0,255,157,0.3)]'
+                : 'border-red-500 text-red-500 bg-red-500/10'
+            }`}
+          >
+            <ShieldAlert size={10} />
+            ANTI-SPOOFING: {livenessEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${
+              autoTracking
+                ? 'border-[#00f0ff] text-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+                : 'border-slate-500 text-slate-500 bg-slate-800/50'
+            }`}
+          >
+            <Activity size={10} />
+            SUIVI IA: {autoTracking ? 'ON' : 'OFF'}
+          </div>
+        </div>
+
         <div className="text-right flex flex-col items-end">
           <div className="font-mono text-2xl tracking-widest text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">
             {time.toLocaleTimeString('fr-FR', {
@@ -445,16 +504,18 @@ export default function ClassroomCamera() {
         />
 
         <div className="relative w-full h-full overflow-hidden">
-          <Webcam
-            ref={webcamRef}
-            audio={false}
-            screenshotFormat="image/jpeg"
-            videoConstraints={{
-              deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-              facingMode: 'user',
-            }}
-            className={`w-full h-full object-cover grayscale-[20%] contrast-[1.1] transition-all duration-700 ${status.includes('holding') || status.includes('scanning') ? 'scale-105 filter brightness-110' : 'scale-100'}`}
-          />
+          {status !== 'standby' && (
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              screenshotFormat="image/jpeg"
+              videoConstraints={{
+                deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                facingMode: 'user',
+              }}
+              className={`w-full h-full object-cover grayscale-[20%] contrast-[1.1] transition-all duration-700 ${status.includes('holding') || status.includes('scanning') ? 'scale-105 filter brightness-110' : 'scale-100'}`}
+            />
+          )}
 
           {status === 'standby' && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md text-[#00f0ff]/40">
@@ -464,6 +525,18 @@ export default function ClassroomCamera() {
               </h2>
               <p className="tracking-[0.1em] text-sm text-slate-500">
                 SYSTÈME PRÊT - EN ATTENTE DE SIGNAL
+              </p>
+            </div>
+          )}
+
+          {status === 'paused' && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md text-yellow-500/80">
+              <Activity size={80} className="mb-6 opacity-40" />
+              <h2 className="text-3xl font-bold tracking-[0.2em] uppercase mb-3 text-yellow-500">
+                SESSION EN PAUSE
+              </h2>
+              <p className="tracking-[0.1em] text-sm text-yellow-500/60">
+                LE SCAN EST TEMPORAIREMENT SUSPENDU
               </p>
             </div>
           )}
@@ -510,6 +583,8 @@ export default function ClassroomCamera() {
             {!status.includes('ready') &&
               !status.includes('holding') &&
               !status.includes('scanning') &&
+              status !== 'standby' &&
+              status !== 'paused' &&
               !showPinPad && (
                 <div className="absolute inset-0 z-40 backdrop-blur-sm bg-black/60 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
                   <div

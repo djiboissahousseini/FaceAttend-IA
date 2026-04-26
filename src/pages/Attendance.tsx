@@ -13,6 +13,9 @@ import {
   PlayCircle,
   CalendarClock,
   XCircle,
+  ShieldAlert,
+  Cpu,
+  PauseCircle
 } from 'lucide-react';
 import { Session, Student, Teacher, Course } from '../types';
 
@@ -63,6 +66,9 @@ export default function Attendance() {
     return localStorage.getItem('faceattend_camera_classroom') || 'Salle B1';
   });
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  
+  const [livenessEnabled, setLivenessEnabled] = useState(true);
+  const [autoTracking, setAutoTracking] = useState(true);
 
   useEffect(() => {
     Promise.all([fetchTeachers(), fetchSessions(), fetchCourses()]);
@@ -116,6 +122,18 @@ export default function Attendance() {
       timestamp: Date.now(),
     };
     localStorage.setItem(`faceattend_cmd_${activeClassroom}`, JSON.stringify(commandData));
+  };
+
+  const toggleLiveness = () => {
+    const newVal = !livenessEnabled;
+    setLivenessEnabled(newVal);
+    sendCommand('TOGGLE_LIVENESS', { enabled: newVal });
+  };
+
+  const toggleAutoTracking = () => {
+    const newVal = !autoTracking;
+    setAutoTracking(newVal);
+    sendCommand('TOGGLE_AUTO_TRACKING', { enabled: newVal });
   };
 
   const handleLaunchCamera = () => {
@@ -241,7 +259,8 @@ export default function Attendance() {
     (s) => s.status !== 'active' && s.status !== 'closed' && s.status !== 'cancelled'
   );
 
-  const rooms = ['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'];
+  const extractedRooms = Array.from(new Set(courses.map(c => c.room).filter(Boolean)));
+  const rooms = extractedRooms.length > 0 ? extractedRooms : ['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'];
 
   return (
     <div className="space-y-6">
@@ -314,20 +333,38 @@ export default function Attendance() {
                 ))}
               </select>
 
-              <input
-                type="text"
+              <select
                 value={sessionForm.course_name}
-                onChange={(e) => setSessionForm({ ...sessionForm, course_name: e.target.value })}
-                placeholder="Module / Cours"
+                onChange={(e) => {
+                  const course = courses.find((c) => c.name === e.target.value);
+                  setSessionForm({
+                    ...sessionForm,
+                    course_name: e.target.value,
+                    teacher_id: course ? String(teachers.find(t => t.name === course.teacher_name)?.id || '') : sessionForm.teacher_id,
+                    group_name: course ? course.group_name : sessionForm.group_name
+                  });
+                }}
                 className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none"
-              />
-              <input
-                type="text"
+              >
+                <option value="">Sélectionner Module</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name} ({c.course_code})
+                  </option>
+                ))}
+              </select>
+
+              <select
                 value={sessionForm.group_name}
                 onChange={(e) => setSessionForm({ ...sessionForm, group_name: e.target.value })}
-                placeholder="Section / Groupe"
                 className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none"
-              />
+              >
+                <option value="ALL">Tous les Groupes</option>
+                <option value="01">Groupe 01</option>
+                <option value="02">Groupe 02</option>
+                <option value="03">Groupe 03</option>
+                <option value="04">Groupe 04</option>
+              </select>
 
               <input
                 type="date"
@@ -444,21 +481,29 @@ export default function Attendance() {
               <p className="text-sm text-slate-300 font-bold mb-4">
                 Commandes Manuelles (Administrateur)
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 <button
                   onClick={() => sendCommand('OVERRIDE_TEACHER')}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
                 >
                   <Unlock size={20} className="text-emerald-400" />
-                  <span className="text-xs font-medium text-center">Ouvrir la session</span>
+                  <span className="text-xs font-medium text-center">Ouvrir session</span>
                 </button>
 
                 <button
-                  onClick={() => sendCommand('FORCE_STANDBY')}
+                  onClick={() => sendCommand('FORCE_STANDBY', { session_id: activeSession?.id })}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
                 >
                   <PowerOff size={20} className="text-red-400" />
-                  <span className="text-xs font-medium text-center">Fermer la session</span>
+                  <span className="text-xs font-medium text-center">Fermer session</span>
+                </button>
+
+                <button
+                  onClick={() => sendCommand('PAUSE_SESSION')}
+                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
+                >
+                  <PauseCircle size={20} className="text-yellow-400" />
+                  <span className="text-xs font-medium text-center">Mettre en pause</span>
                 </button>
 
                 <button
@@ -466,7 +511,31 @@ export default function Attendance() {
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
                 >
                   <RefreshCw size={20} className="text-blue-400" />
-                  <span className="text-xs font-medium text-center">Redémarrer l'écran</span>
+                  <span className="text-xs font-medium text-center">Redémarrer écran</span>
+                </button>
+
+                <button
+                  onClick={toggleLiveness}
+                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${
+                    livenessEnabled
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  <ShieldAlert size={20} className={livenessEnabled ? 'text-emerald-400' : 'text-slate-400'} />
+                  <span className="text-xs font-medium text-center">Anti-Spoofing {livenessEnabled ? 'Actif' : 'Inactif'}</span>
+                </button>
+
+                <button
+                  onClick={toggleAutoTracking}
+                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${
+                    autoTracking
+                      ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  <Cpu size={20} className={autoTracking ? 'text-blue-400' : 'text-slate-400'} />
+                  <span className="text-xs font-medium text-center">Suivi IA {autoTracking ? 'Actif' : 'Inactif'}</span>
                 </button>
               </div>
             </div>
@@ -529,7 +598,7 @@ export default function Attendance() {
                           {s.course_name}
                         </p>
                         <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">
-                          {s.group_name}
+                          {s.group_name === 'ALL' ? 'TOUS LES GROUPES' : `GRP ${s.group_name}`}
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-400 uppercase font-medium">
@@ -615,7 +684,7 @@ export default function Attendance() {
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      Groupe {sessionDetails.session.group_name}
+                      {sessionDetails.session.group_name === 'ALL' ? 'TOUS LES GROUPES' : `Groupe ${sessionDetails.session.group_name}`}
                     </span>
                     <span className="w-1 h-1 rounded-full bg-slate-300" />
                     <span className="text-xs font-bold text-slate-400 italic">

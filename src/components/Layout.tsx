@@ -12,6 +12,7 @@ import {
   MonitorPlay,
   GraduationCap,
   LogOut,
+  MapPin,
 } from 'lucide-react';
 import { Page } from '../types';
 
@@ -31,6 +32,7 @@ const navItems = [
   { id: 'students', label: 'Étudiants', icon: <Users size={20} /> },
   { id: 'attendance', label: 'Présence IA', icon: <Camera size={20} /> },
   { id: 'courses', label: 'Cours & Groupes', icon: <BookOpen size={20} /> },
+  { id: 'classrooms', label: 'Gestion des Salles', icon: <MapPin size={20} /> },
   { id: 'alerts', label: 'Alertes Absences', icon: <BellRing size={20} /> },
   { id: 'reports', label: 'Rapports', icon: <BarChart3 size={20} /> },
   { id: 'student_space', label: 'Simulation Étudiants', icon: <MonitorPlay size={20} /> },

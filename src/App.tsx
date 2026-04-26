@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import StudentLogin from './pages/StudentLogin';
 import StudentDashboard from './pages/StudentDashboard';
 import AdminStudentSpace from './pages/AdminStudentSpace';
+import Classrooms from './pages/Classrooms';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -141,6 +142,8 @@ function App() {
           return <Alerts />;
         case 'reports':
           return <Reports />;
+        case 'classrooms':
+          return <Classrooms />;
         case 'student_space':
           return <AdminStudentSpace />;
         default:

@@ -131,4 +131,5 @@ export type Page =
   | 'classroom'
   | 'alerts'
   | 'reports'
+  | 'classrooms'
   | 'student_space';
