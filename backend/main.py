@@ -153,6 +153,7 @@ class CourseCreate(BaseModel):
     schedule_time: Optional[str] = ""
     room: Optional[str] = ""
     group_name: Optional[str] = "ALL"
+    course_type: Optional[str] = "Cours"
     absence_threshold: Optional[int] = 5
 
     @field_validator("department_id", mode="before")
@@ -560,7 +561,7 @@ def get_courses(db: Session = Depends(get_db)):
     SELECT c.id, c.course_code, c.name, c.teacher_name, c.department_id,
            c.semester, c.schedule_day, c.schedule_time, c.room,
            c.group_name, c.absence_threshold, c.created_at::text,
-           d.name as dept_name, d.code as dept_code
+           d.name as dept_name, d.code as dept_code, c.course_type
     FROM courses c
     LEFT JOIN departments d ON c.department_id = d.id
     ORDER BY c.name
@@ -581,7 +582,8 @@ def get_courses(db: Session = Depends(get_db)):
                 "group_name": r[9],
                 "absence_threshold": r[10],
                 "created_at": r[11],
-                "departments": {"name": r[12], "code": r[13]} if r[12] else None
+                "departments": {"name": r[12], "code": r[13]} if r[12] else None,
+                "course_type": r[14] or "Cours"
             })
         return courses
     except Exception as e:
@@ -593,9 +595,9 @@ def create_course(course: CourseCreate, db: Session = Depends(get_db)):
     try:
         query = text("""
             INSERT INTO courses (course_code, name, teacher_name, department_id,
-                                 semester, schedule_day, schedule_time, room, group_name, absence_threshold)
+                                 semester, schedule_day, schedule_time, room, group_name, course_type, absence_threshold)
             VALUES (:course_code, :name, :teacher_name, CAST(:department_id AS uuid),
-                    :semester, :schedule_day, :schedule_time, :room, :group_name, :absence_threshold)
+                    :semester, :schedule_day, :schedule_time, :room, :group_name, :course_type, :absence_threshold)
         """)
         db.execute(query, {
             "course_code": course.course_code,
@@ -607,6 +609,7 @@ def create_course(course: CourseCreate, db: Session = Depends(get_db)):
             "schedule_time": course.schedule_time,
             "room": course.room,
             "group_name": course.group_name,
+            "course_type": course.course_type or "Cours",
             "absence_threshold": course.absence_threshold,
         })
         db.commit()
@@ -629,6 +632,7 @@ def update_course(course_id: str, course: CourseCreate, db: Session = Depends(ge
                 schedule_time = :schedule_time,
                 room = :room,
                 group_name = :group_name,
+                course_type = :course_type,
                 absence_threshold = :absence_threshold
             WHERE id = CAST(:id AS uuid)
         """)
@@ -642,6 +646,7 @@ def update_course(course_id: str, course: CourseCreate, db: Session = Depends(ge
             "schedule_time": course.schedule_time,
             "room": course.room,
             "group_name": course.group_name,
+            "course_type": course.course_type or "Cours",
             "absence_threshold": course.absence_threshold,
             "id": course_id
         })
@@ -843,7 +848,12 @@ def student_login(credentials: StudentLogin, db: Session = Depends(get_db)):
 @app.get("/api/students/{student_id}/full-stats")
 def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
     # 1. Infos étudiant
-    query_student = text("SELECT id, full_name, email, student_code, department_id, group_name, photo_url FROM students WHERE id = :id")
+    query_student = text("""
+        SELECT s.id, s.full_name, s.email, s.student_code, d.name as filiere, s.group_name, s.photo_url, s.department_id
+        FROM students s
+        LEFT JOIN departments d ON s.department_id = d.id
+        WHERE s.id = CAST(:id AS uuid)
+    """)
     student_row = db.execute(query_student, {"id": student_id}).fetchone()
     
     if not student_row:
@@ -858,6 +868,52 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
         "group": student_row[5],
         "photo_url": student_row[6]
     }
+    
+    dept_id = student_row[7]
+    group_name = student_row[5] or ''
+
+    # 1.5 Fetch all modules/courses assigned to this student
+    # Si l'étudiant n'a pas de département (:dept_id IS NULL), on lui assigne tous les cours par défaut (Informatique)
+    query_courses = text("""
+        SELECT name, absence_threshold, schedule_day, schedule_time, room, group_name, teacher_name, course_type
+        FROM courses
+        WHERE (department_id = :dept_id OR department_id IS NULL OR :dept_id IS NULL)
+          AND (group_name = :group_name OR group_name = 'ALL' OR group_name = '')
+    """)
+    assigned_courses = db.execute(query_courses, {"dept_id": dept_id, "group_name": group_name}).fetchall()
+    
+    modules_stats = {}
+    # Détecter les noms de cours présents à la fois en Amphi (ALL) ET en groupe spécifique
+    all_names = [c[0] for c in assigned_courses if (c[5] or 'ALL') == 'ALL']
+    grp_names = [c[0] for c in assigned_courses if (c[5] or 'ALL') != 'ALL']
+    ambiguous_names = set(all_names) & set(grp_names)
+
+    for c in assigned_courses:
+        course_name = c[0]
+        grp = c[5] or 'ALL'
+        teacher = c[6] or ''
+        course_type = c[7] or 'Cours'
+
+        # Utiliser le type officiel du cours pour le libellé
+        # N'ajouter le suffixe que s'il y a ambiguïté avec un même nom en plusieurs types
+        if course_name in ambiguous_names:
+            display_name = f"{course_name} ({course_type})"
+        else:
+            display_name = course_name
+
+        key = f"{course_name}_{grp}"
+        
+        modules_stats[key] = {
+            "name": display_name, 
+            "presences": 0, 
+            "absences": 0, 
+            "threshold": c[1] or 3,
+            "schedule_day": c[2] or "",
+            "schedule_time": c[3] or "",
+            "room": c[4] or "",
+            "teacher": teacher,
+            "course_type": course_type
+        }
 
     # 2. Historique et calcul des stats
     query_history = text("""
@@ -865,7 +921,7 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
         FROM attendance_records a
         JOIN sessions s ON a.session_id = s.id
         LEFT JOIN courses c ON s.course_name = c.name AND s.group_name = c.group_name
-        WHERE a.student_id = :id
+        WHERE a.student_id = CAST(:id AS uuid)
         ORDER BY s.session_date DESC, s.start_time DESC
     """)
     records = db.execute(query_history, {"id": student_id}).fetchall()
@@ -874,7 +930,6 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
     absent_count = 0
     late_count = 0
     excused_count = 0
-    modules_stats = {}
     history_data = []
 
     for r in records:
@@ -885,13 +940,32 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
         elif status == 'late': late_count += 1
         elif status == 'excused': excused_count += 1
         
-        if course_name not in modules_stats:
-            modules_stats[course_name] = {"name": course_name, "presences": 0, "absences": 0, "threshold": threshold or 3}
+        grp_normalized = grp or 'ALL'
+        key = f"{course_name}_{grp_normalized}"
+        
+        if key not in modules_stats:
+            # Fallback if the course in history is not in the assigned courses list
+            if course_name in ambiguous_names:
+                display_name = f"{course_name} (Hist.)"
+            else:
+                display_name = course_name
+            
+            modules_stats[key] = {
+                "name": display_name, 
+                "presences": 0, 
+                "absences": 0, 
+                "threshold": threshold or 3,
+                "schedule_day": "",
+                "schedule_time": "",
+                "room": "",
+                "teacher": "",
+                "course_type": "Cours"
+            }
             
         if status in ['present', 'late']:
-            modules_stats[course_name]["presences"] += 1
+            modules_stats[key]["presences"] += 1
         elif status == 'absent':
-            modules_stats[course_name]["absences"] += 1
+            modules_stats[key]["absences"] += 1
             
         history_data.append({
             "id": s_id,
@@ -1166,6 +1240,63 @@ def get_records(session_id: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+def sync_student_alerts(student_id: str, session_id: int, db: Session):
+    try:
+        # 1. Get course details from session
+        session_query = text("SELECT course_name, group_name FROM sessions WHERE id = :sid")
+        s_row = db.execute(session_query, {"sid": int(session_id)}).fetchone()
+        if not s_row: return
+        
+        c_name, g_name = s_row
+        # Find matching course to get its ID and threshold
+        course_query = text("""
+            SELECT id, absence_threshold FROM courses 
+            WHERE name = :name AND (group_name = :group OR group_name = 'ALL' OR group_name = '')
+            LIMIT 1
+        """)
+        c_row = db.execute(course_query, {"name": c_name, "group": g_name}).fetchone()
+        if not c_row: return
+        
+        course_id, threshold = c_row
+        threshold = threshold or 3
+        
+        # 2. Count total absences for this student in this course
+        abs_query = text("""
+            SELECT COUNT(*) 
+            FROM attendance_records ar
+            JOIN sessions s ON ar.session_id = s.id
+            WHERE ar.student_id = CAST(:sid AS uuid) 
+              AND s.course_name = :cname 
+              AND ar.status = 'absent'
+        """)
+        abs_count = db.execute(abs_query, {"sid": student_id, "cname": c_name}).scalar()
+        
+        # 3. Update alert table
+        if abs_count >= threshold:
+            upsert_query = text("""
+                INSERT INTO absence_alerts (student_id, course_id, absence_count, threshold, status, generated_at)
+                VALUES (CAST(:sid AS uuid), CAST(:cid AS uuid), :count, :th, 'active', NOW())
+                ON CONFLICT (student_id, course_id)
+                DO UPDATE SET absence_count = EXCLUDED.absence_count, 
+                              status = 'active',
+                              generated_at = NOW()
+            """)
+            db.execute(upsert_query, {
+                "sid": student_id, 
+                "cid": str(course_id), 
+                "count": abs_count, 
+                "th": threshold
+            })
+        else:
+            # Below threshold: remove alert if exists
+            del_query = text("DELETE FROM absence_alerts WHERE student_id = CAST(:sid AS uuid) AND course_id = CAST(:cid AS uuid)")
+            db.execute(del_query, {"sid": student_id, "cid": str(course_id)})
+            
+        db.commit()
+    except Exception as e:
+        print(f"Alert Sync Error: {e}")
+        db.rollback()
+
 @app.post("/api/records/upsert")
 def upsert_record(record: AttendanceUpsert, db: Session = Depends(get_db)):
     try:
@@ -1184,6 +1315,10 @@ def upsert_record(record: AttendanceUpsert, db: Session = Depends(get_db)):
             "confidence_score": record.confidence_score,
         })
         db.commit()
+        
+        # Sync alerts
+        sync_student_alerts(record.student_id, int(record.session_id), db)
+        
         return {"message": "Success"}
     except Exception as e:
         db.rollback()
@@ -1509,3 +1644,59 @@ def get_reports(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.get("/api/teachers/{teacher_id}/dashboard")
+def get_teacher_dashboard_stats(teacher_id: int, db: Session = Depends(get_db)):
+    try:
+        import datetime
+        today = datetime.date.today().isoformat()
+        stats = {}
+        
+        # 1. Nom de l'enseignant
+        t = db.execute(text("SELECT name FROM teachers WHERE id = :id"), {"id": teacher_id}).fetchone()
+        t_name = t[0] if t else "Unknown"
+
+        # 2. Stats
+        r = db.execute(text("SELECT COUNT(*) FROM courses WHERE teacher_name = :n"), {"n": t_name}).fetchone()
+        stats["totalCourses"] = r[0]
+
+        r = db.execute(text("SELECT COUNT(*) FROM sessions WHERE teacher_id = :id AND session_date = :d"), {"id": teacher_id, "d": today}).fetchone()
+        stats["todaySessions"] = r[0]
+
+        r = db.execute(text("""
+            SELECT COUNT(*) FROM attendance_records ar 
+            JOIN sessions s ON ar.session_id = s.id 
+            WHERE s.teacher_id = :id AND ar.status = 'present'
+        """), {"id": teacher_id}).fetchone()
+        present = r[0]
+
+        r = db.execute(text("""
+            SELECT COUNT(*) FROM attendance_records ar 
+            JOIN sessions s ON ar.session_id = s.id 
+            WHERE s.teacher_id = :id
+        """), {"id": teacher_id}).fetchone()
+        total = r[0] or 1
+        stats["attendanceRate"] = round((present / total) * 100)
+
+        # 3. Activité récente
+        recs = db.execute(text("""
+            SELECT ar.id, s.full_name, s.photo_url, sess.course_name, ar.marked_at::text
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            JOIN sessions sess ON ar.session_id = sess.id
+            WHERE sess.teacher_id = :id
+            ORDER BY ar.marked_at DESC LIMIT 10
+        """), {"id": teacher_id})
+        
+        recent_records = []
+        for row in recs:
+            recent_records.append({
+                "id": str(row[0]),
+                "student": {"name": row[1], "photo_url": row[2]},
+                "session": {"course_name": row[3]},
+                "marked_at": row[4]
+            })
+
+        return {"stats": stats, "recentRecords": recent_records}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

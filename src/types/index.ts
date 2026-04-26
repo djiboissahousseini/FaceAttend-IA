@@ -3,6 +3,8 @@ export interface Teacher {
   name: string;
   email: string;
   photo_url?: string;
+  pin_code?: string;
+  password?: string;
 }
 
 export interface Session {
@@ -17,6 +19,8 @@ export interface Session {
   end_time?: string;
   teacher_name?: string;
   status?: string;
+  is_active?: boolean;
+  is_manual?: boolean;
 }
 
 export interface Department {

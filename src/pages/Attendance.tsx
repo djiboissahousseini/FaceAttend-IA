@@ -41,8 +41,10 @@ async function readJsonSafe<T>(res: Response): Promise<T | null> {
 export default function Attendance() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionAttendanceResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
 
   // Forms
   const [sessionForm, setSessionForm] = useState({
@@ -60,17 +62,25 @@ export default function Attendance() {
     return localStorage.getItem('faceattend_camera_classroom') || 'Salle B1';
   });
   const [activeSession, setActiveSession] = useState<Session | null>(null);
-  const [anticipateSessions, setAnticipateSessions] = useState<Session[]>([]);
-  const [selectedAnticipateSession, setSelectedAnticipateSession] = useState('');
 
   useEffect(() => {
-    Promise.all([fetchTeachers(), fetchSessions()]);
+    Promise.all([fetchTeachers(), fetchSessions(), fetchCourses()]);
   }, []);
+
+  async function fetchCourses() {
+    try {
+      const res = await fetch(`${API}/api/courses`);
+      if (res.ok) {
+        const data = await res.json();
+        setCourses(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   useEffect(() => {
     localStorage.setItem('faceattend_camera_classroom', activeClassroom);
-    // Mise à jour anticipateSessions pour le menu déroulant
-    setAnticipateSessions(sessions.filter((s) => s.classroom === activeClassroom));
 
     let cancelled = false;
     const fetchActiveSession = async () => {
@@ -89,13 +99,13 @@ export default function Attendance() {
       }
     };
 
-    fetchActiveSession(); // Appel immédiat
-    const interval = setInterval(fetchActiveSession, 15000); // Rafraîchissement toutes les 15s
+    fetchActiveSession();
+    const interval = setInterval(fetchActiveSession, 15000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeClassroom, sessions]);
+  }, [activeClassroom]);
 
   // Command Sender
   const sendCommand = (cmd: string, payload?: unknown) => {
@@ -460,44 +470,126 @@ export default function Attendance() {
       </div>
 
       {/* ─── LIVE ATTENDANCE GRID ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[360px,1fr] gap-6">
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col h-[600px]">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <CalendarDays size={18} className="text-blue-500" />
-              <h3 className="font-bold text-slate-800">Sessions du Jour</h3>
-            </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[400px,1fr] gap-6">
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col h-[600px] shadow-sm">
+          {/* TABS SELECTOR */}
+          <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+            <button
+              onClick={() => setActiveTab('live')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'live'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Video size={14} />
+              Sessions Live
+            </button>
+            <button
+              onClick={() => setActiveTab('master')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'master'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <CalendarDays size={14} />
+              Agenda Master
+            </button>
           </div>
+
           <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar">
-            {sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => loadSession(Number(s.id))}
-                className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-                  selectedSessionId === Number(s.id)
-                    ? 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-500/10'
-                    : 'border-slate-50 hover:border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <p className="font-bold text-slate-800 leading-tight">{s.course_name}</p>
-                  <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black uppercase">
-                    {s.group_name}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                    {s.teacher_name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 flex items-center gap-1.5 uppercase font-medium">
-                    <CalendarDays size={10} />
-                    {new Date(s.session_date).toLocaleDateString('fr-FR')} ·{' '}
-                    {s.classroom || 'Salle n/a'}
-                  </p>
-                </div>
-              </button>
-            ))}
+            {activeTab === 'live' ? (
+              sessions
+                .filter((s) => s.classroom === activeClassroom)
+                .map((s) => (
+                  <div
+                    key={s.id}
+                    className={`group relative p-4 rounded-2xl border-2 transition-all ${
+                      selectedSessionId === Number(s.id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : s.status === 'closed'
+                          ? 'border-slate-100 bg-slate-50 opacity-60'
+                          : 'border-slate-50 hover:border-slate-200 bg-white'
+                    }`}
+                  >
+                    <button
+                      onClick={() => loadSession(Number(s.id))}
+                      className="w-full text-left pr-8"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <p
+                          className={`font-bold text-sm leading-tight ${s.status === 'closed' ? 'line-through text-slate-400' : 'text-slate-800'}`}
+                        >
+                          {s.course_name}
+                        </p>
+                        <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">
+                          {s.group_name}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 uppercase font-medium">
+                        {new Date(s.session_date).toLocaleDateString('fr-FR')} · {s.start_time}
+                      </p>
+                    </button>
+
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {s.status !== 'closed' ? (
+                        <button
+                          onClick={() => cancelActiveSession(s.id)}
+                          className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                          title="Annuler la session"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            await fetch(`${API}/api/sessions/${s.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'active', is_active: true }),
+                            });
+                            fetchSessions();
+                          }}
+                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                          title="Rétablir la session"
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              courses
+                .filter((c) => c.room === activeClassroom)
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-indigo-200 transition-all"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-bold text-slate-800 text-sm">{c.name}</p>
+                      <span className="text-[9px] border border-indigo-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold uppercase">
+                        Théorique
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">
+                        {c.schedule_day} · {c.schedule_time}
+                      </p>
+                      <p className="text-[10px] text-slate-400">Prof: {c.teacher_name}</p>
+                    </div>
+                  </div>
+                ))
+            )}
+            
+            {activeTab === 'live' && sessions.filter(s => s.classroom === activeClassroom).length === 0 && (
+               <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8">
+                  <Video size={32} className="mb-2 opacity-20" />
+                  <p className="text-xs">Aucune session enregistrée pour cette salle aujourd'hui.</p>
+               </div>
+            )}
           </div>
         </div>
 

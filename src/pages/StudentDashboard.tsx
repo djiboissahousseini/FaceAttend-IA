@@ -10,10 +10,16 @@ import {
   History,
   User,
   Cpu,
+  GraduationCap,
   LogOut,
   ScanFace,
+  CalendarDays,
+  Clock,
+  MapPin,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
+import { DOC_TITLE } from '../constants/documentTitles';
+import { UNIVERSITY_LOGO_ALT, UNIVERSITY_LOGO_SRC } from '../constants/universityBranding';
 
 interface StudentData {
   id: string;
@@ -31,7 +37,17 @@ interface StudentStats {
   total_presences: number;
   total_absences: number;
   history: Array<{ status: string; course_name: string; date: string }>;
-  modules: Array<{ name: string; threshold: number; absences: number; presences: number }>;
+  modules: Array<{
+    name: string;
+    threshold: number;
+    absences: number;
+    presences: number;
+    schedule_day?: string;
+    schedule_time?: string;
+    room?: string;
+    teacher?: string;
+    course_type?: string;
+  }>;
 }
 
 interface StudentDashboardProps {
@@ -46,7 +62,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
-    document.title = 'FaceAttend | Étudiant';
+    document.title = DOC_TITLE.studentApp;
 
     if (simulatedStudentId) {
       fetchStats(simulatedStudentId);
@@ -113,15 +129,18 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
     );
   }
 
-  // ─── CONSISTENT UNIVERSITY HEADER ───
+  // ─── En-tête établissement (sans logo image : réservé aux dashboards admin / enseignant) ───
   const UniversityHeader = () => (
     <div className="w-full relative bg-gradient-to-br from-slate-900 via-[#0b1219] to-slate-950 rounded-[2.5rem] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.6)] border border-white/5 overflow-hidden flex items-center min-h-[140px] mb-8 group transition-all duration-500 hover:border-emerald-500/20 hover:shadow-[0_20px_60px_rgba(16,185,129,0.1)]">
       <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full -mr-32 -mt-32 transition-all duration-700 group-hover:bg-emerald-500/20" />
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/5 blur-[80px] rounded-full -ml-16 -mb-16" />
       <div className="flex items-center w-full relative z-10">
-        <div className="w-20 h-20 rounded-[1.5rem] bg-white border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.05)] relative group-hover:scale-105 transition-transform duration-500">
-          <img src="/logo5.jpeg" className="w-full h-full object-contain p-1.5" alt="Logo UAT" />
-          <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="w-20 h-20 rounded-[1.5rem] bg-white border border-emerald-500/25 flex items-center justify-center flex-shrink-0 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative group-hover:scale-105 transition-transform duration-500 overflow-hidden p-2">
+          <img
+            src={UNIVERSITY_LOGO_SRC}
+            alt={UNIVERSITY_LOGO_ALT}
+            className="w-full h-full object-contain"
+          />
         </div>
         <div className="ml-6 space-y-1">
           <div className="space-y-0">
@@ -135,7 +154,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <div className="flex items-center gap-2.5 pt-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,1)] animate-pulse" />
             <p className="text-emerald-400 text-[11px] font-black uppercase tracking-[0.3em]">
-              Informatique
+              {student?.filiere || 'Informatique'}
             </p>
           </div>
         </div>
@@ -178,10 +197,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center mt-2">
-                <p className="text-[12px] text-emerald-400/80 font-black uppercase tracking-[0.5em] mb-1">
+                <p className="text-[12px] text-emerald-400 font-black uppercase tracking-[0.5em] mb-1 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">
                   Assiduité
                 </p>
-                <span className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 tracking-tighter drop-shadow-lg">
+                <span className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                   {stats?.attendance_rate}%
                 </span>
                 <div className="w-16 h-1 bg-gradient-to-r from-emerald-500/0 via-emerald-500/50 to-emerald-500/0 mt-3" />
@@ -189,42 +208,51 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             </div>
 
             <div className="grid grid-cols-2 gap-4 w-full max-w-[340px] mt-12 px-2">
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:bg-slate-900/80 hover:border-emerald-500/20 group">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 mb-1 group-hover:scale-110 transition-transform">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-emerald-500/50 shadow-2xl group">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 mb-1 group-hover:scale-110 transition-transform">
                   <CheckCircle2 size={16} />
                 </div>
                 <p className="text-4xl font-black text-white">{stats?.total_presences}</p>
-                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
                   Présences
                 </p>
               </div>
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:bg-slate-900/80 hover:border-red-500/20 group">
-                <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 mb-1 group-hover:scale-110 transition-transform">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-red-500/50 shadow-2xl group">
+                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 mb-1 group-hover:scale-110 transition-transform">
                   <XCircle size={16} />
                 </div>
-                <p className="text-4xl font-black text-slate-300">{stats?.total_absences}</p>
-                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">
+                <p className="text-4xl font-black text-white">{stats?.total_absences}</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
                   Absences
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Student Identity HUD - Card Style */}
           <div className="w-full pt-4 pb-8 px-2">
-            <div className="bg-gradient-to-b from-slate-900/80 to-[#020617] backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 flex flex-col items-center gap-4 relative overflow-hidden">
-              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent opacity-50" />
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-6 flex flex-col items-center gap-4 relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent opacity-80" />
               <h1 className="text-2xl font-black text-white uppercase tracking-tight text-center leading-tight">
                 {student?.name}
               </h1>
-              <div className="flex items-center gap-4 bg-black/40 px-6 py-2.5 rounded-full border border-white/5">
+
+              <div className="flex flex-col items-center gap-2 -mt-2">
+                <span className="text-[10px] font-black text-slate-500 tracking-[0.2em]">
+                  {student?.email?.toLowerCase() || 'email@etudiant.univ'}
+                </span>
+                <span className="text-[12px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-4 py-1 rounded-full border border-emerald-500/20">
+                  {student?.filiere || 'Filière non définie'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 bg-black/60 px-6 py-2.5 rounded-full border border-slate-800">
                 <div className="flex items-center gap-2">
-                  <ScanFace size={14} className="text-emerald-500" />
-                  <span className="text-[12px] font-black text-emerald-400 uppercase tracking-[0.3em]">
+                  <ScanFace size={14} className="text-emerald-400" />
+                  <span className="text-[12px] font-black text-emerald-400 uppercase tracking-[0.3em] drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
                     {student?.code}
                   </span>
                 </div>
-                <div className="w-[1px] h-4 bg-white/20" />
+                <div className="w-[1px] h-4 bg-slate-800" />
                 <div className="flex items-center gap-2">
                   <User size={14} className="text-slate-400" />
                   <span className="text-[12px] font-black text-slate-300 uppercase tracking-[0.3em]">
@@ -245,10 +273,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+              <h3 className="text-white font-black text-2xl uppercase tracking-tighter drop-shadow-lg">
                 Mes Modules
               </h3>
-              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+              <p className="text-emerald-400 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
                 Suivi de présence expert
               </p>
             </div>
@@ -256,45 +284,98 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           </div>
           <div className="space-y-4 px-2">
             {stats?.modules.map((m, i) => {
-              const rate =
-                m.presences + m.absences > 0
-                  ? Math.round((m.presences / (m.presences + m.absences)) * 100)
-                  : 100;
-              const isWarning = rate < 80;
+              const totalSessions = m.presences + m.absences;
+              const rate = totalSessions > 0 ? Math.round((m.presences / totalSessions) * 100) : 0;
+
+              // Logique d'alerte experte
+              const remainingAbsences = m.threshold - m.absences;
+              const isThresholdReached = remainingAbsences <= 0;
+              const isCritical = remainingAbsences === 1;
+              const hasStarted = totalSessions > 0;
+
               return (
                 <div
                   key={i}
-                  className={`bg-slate-900/60 backdrop-blur-xl border ${isWarning ? 'border-red-500/20' : 'border-white/5 hover:border-emerald-500/20'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 group`}
+                  className={`bg-slate-900 border ${isThresholdReached ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : isCritical ? 'border-orange-500/50' : 'border-slate-800 hover:border-emerald-500/50'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 shadow-xl group relative overflow-hidden`}
                 >
+                  {isThresholdReached && (
+                    <div className="absolute top-0 right-0 bg-red-500 text-white text-[8px] font-black px-4 py-1 rounded-bl-xl uppercase tracking-widest animate-pulse">
+                      Seuil Atteint
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-black text-white uppercase tracking-tight truncate max-w-[180px]">
-                      {m.name}
-                    </span>
+                    <div className="space-y-1">
+                      <span className="text-sm font-black text-white uppercase tracking-tight truncate block max-w-[200px]">
+                        {m.name}
+                      </span>
+                      <div className="flex gap-2">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+                          {m.teacher || 'Professeur'}
+                        </span>
+                        {m.course_type && (
+                          <span className="text-[8px] font-black text-emerald-500/80 uppercase tracking-widest bg-emerald-500/5 px-1.5 rounded">
+                            {m.course_type}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <span
-                      className={`text-2xl font-black ${isWarning ? 'text-red-400 drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]'}`}
+                      className={`text-2xl font-black ${!hasStarted ? 'text-slate-700' : isThresholdReached ? 'text-red-500' : isCritical ? 'text-orange-400' : 'text-emerald-400'} drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]`}
                     >
-                      {rate}%
+                      {hasStarted ? `${rate}%` : '0%'}
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden border border-white/5 relative">
-                    <div className="absolute inset-0 bg-slate-800/50 w-full" />
+
+                  <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-white/5 relative">
+                    <div className="absolute inset-0 bg-slate-800/30 w-full" />
                     <div
-                      className={`h-full absolute left-0 top-0 transition-all duration-1000 ${isWarning ? 'bg-red-500' : 'bg-emerald-500'} relative overflow-hidden`}
+                      className={`h-full absolute left-0 top-0 transition-all duration-1000 ${isThresholdReached ? 'bg-red-500' : isCritical ? 'bg-orange-500' : 'bg-emerald-500'} relative overflow-hidden`}
                       style={{ width: `${rate}%` }}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                      {hasStarted && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 pt-1">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={12} className="text-emerald-500/70" /> {m.presences}{' '}
-                      Présences
-                    </span>
-                    <span
-                      className={`flex items-center gap-1.5 ${isWarning ? 'text-red-400 animate-pulse' : 'text-slate-500'}`}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] text-slate-500 font-black uppercase tracking-wider">
+                          Présences
+                        </span>
+                        <span className="text-xs font-black text-white">{m.presences}</span>
+                      </div>
+                      <div className="w-[1px] h-4 bg-slate-800" />
+                      <div className="flex flex-col">
+                        <span className="text-[8px] text-slate-500 font-black uppercase tracking-wider">
+                          Absences
+                        </span>
+                        <span
+                          className={`text-xs font-black ${m.absences > 0 ? 'text-red-400' : 'text-white'}`}
+                        >
+                          {m.absences}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`text-right px-3 py-1.5 rounded-xl border ${isThresholdReached ? 'bg-red-500/10 border-red-500/20' : 'bg-slate-950/50 border-white/5'}`}
                     >
-                      <AlertTriangle size={12} /> Seuil: {m.threshold}
-                    </span>
+                      {isThresholdReached ? (
+                        <p className="text-[9px] text-red-500 font-black uppercase tracking-tighter">
+                          ⚠️ Alerte Exclusion
+                        </p>
+                      ) : (
+                        <p
+                          className={`text-[9px] font-black uppercase tracking-tighter ${isCritical ? 'text-orange-400' : 'text-slate-400'}`}
+                        >
+                          Absences possibles :{' '}
+                          <span className="text-white ml-1 font-black">{remainingAbsences}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -367,13 +448,126 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
       );
     }
 
+    // ─── TIMETABLE TAB ───
+    if (activeTab === 'timetable') {
+      const scheduledModules =
+        stats?.modules.filter((m) => m.schedule_day && m.schedule_time) || [];
+
+      const daysOrder = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+      const groupedModules: Record<string, typeof scheduledModules> = {};
+
+      scheduledModules.forEach((m) => {
+        const day = m.schedule_day || 'Autre';
+        if (!groupedModules[day]) groupedModules[day] = [];
+        groupedModules[day].push(m);
+      });
+
+      const sortedDays = Object.keys(groupedModules).sort((a, b) => {
+        const idxA = daysOrder.indexOf(a);
+        const idxB = daysOrder.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        return a.localeCompare(b);
+      });
+
+      sortedDays.forEach((day) => {
+        groupedModules[day].sort((a, b) =>
+          (a.schedule_time || '').localeCompare(b.schedule_time || '')
+        );
+      });
+
+      return (
+        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+          <UniversityHeader />
+          <div className="px-4 flex items-end justify-between">
+            <div>
+              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+                Emploi du Temps
+              </h3>
+              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+                Planning Structuré
+              </p>
+            </div>
+            <CalendarDays className="text-emerald-500/20 mb-1" size={32} />
+          </div>
+          <div className="space-y-6 px-2">
+            {sortedDays.length === 0 ? (
+              <div className="bg-slate-900/40 border border-slate-800 p-8 rounded-[2rem] text-center">
+                <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">
+                  Aucun cours planifié
+                </p>
+              </div>
+            ) : (
+              sortedDays.map((day) => (
+                <div key={day} className="space-y-3">
+                  <h4 className="text-emerald-400 font-black uppercase tracking-[0.2em] text-xs pl-2 border-l-2 border-emerald-500">
+                    {day}
+                  </h4>
+                  <div className="space-y-3">
+                    {groupedModules[day].map((m, i) => (
+                      <div
+                        key={i}
+                        className="bg-slate-900 border border-slate-800 p-5 rounded-[2rem] space-y-3 transition-all hover:border-emerald-500/50 shadow-xl group relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/10 transition-colors" />
+
+                        <div className="flex justify-between items-start relative z-10 gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-white font-black uppercase tracking-tight text-[15px] leading-tight">
+                              {m.name}
+                            </h4>
+                            {m.course_type && (
+                              <span
+                                className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                  m.course_type === 'TP'
+                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                    : m.course_type === 'TD'
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                }`}
+                              >
+                                {m.course_type}
+                              </span>
+                            )}
+                          </div>
+                          {m.teacher && (
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-800/80 px-2 py-1 rounded-lg border border-white/5 shrink-0">
+                              {m.teacher}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mt-2 relative z-10">
+                          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                            <Clock size={14} className="text-emerald-500/70" />
+                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest">
+                              {m.schedule_time}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                            <MapPin size={14} className="text-emerald-500/70" />
+                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest truncate">
+                              {m.room || 'Non définie'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    }
+
     // ─── PROFILE TAB ───
     if (activeTab === 'profile') {
       return (
         <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
           <UniversityHeader />
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-8 flex flex-col items-center gap-5 text-center mx-2 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full -mr-10 -mt-10 pointer-events-none" />
+          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 flex flex-col items-center gap-5 text-center mx-2 relative overflow-hidden group shadow-2xl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[50px] rounded-full -mr-10 -mt-10 pointer-events-none" />
 
             <div className="relative">
               <div className="absolute -inset-3 bg-emerald-500/20 rounded-full blur-xl opacity-40 animate-pulse" />
@@ -404,7 +598,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               {
                 icon: <User size={20} />,
                 label: 'Email Académique',
-                value: student?.email || 'N/A',
+                value: student?.email?.toLowerCase() || 'N/A',
               },
               {
                 icon: <BookOpen size={20} />,
@@ -419,16 +613,16 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             ].map((item, idx) => (
               <div
                 key={idx}
-                className="bg-slate-900/30 p-5 rounded-[1.5rem] border border-white/5 flex items-center gap-5 transition-all hover:bg-slate-900/60 hover:border-emerald-500/20 group"
+                className="bg-slate-900 p-5 rounded-[1.5rem] border border-slate-800 flex items-center gap-5 transition-all hover:border-emerald-500/40 group shadow-lg"
               >
-                <div className="w-12 h-12 rounded-[1rem] bg-emerald-500/5 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/10 transition-all">
+                <div className="w-12 h-12 rounded-[1rem] bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all">
                   {item.icon}
                 </div>
                 <div className="text-left flex-1">
                   <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em]">
                     {item.label}
                   </p>
-                  <p className="text-[13px] font-black text-white uppercase mt-0.5 tracking-tight truncate">
+                  <p className="text-[14px] font-black text-white mt-0.5 tracking-tight break-all">
                     {item.value}
                   </p>
                 </div>

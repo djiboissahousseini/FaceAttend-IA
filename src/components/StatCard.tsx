@@ -4,7 +4,7 @@ interface StatCardProps {
   title: string;
   value: string | number;
   icon: ReactNode;
-  color: 'blue' | 'green' | 'orange' | 'red' | 'slate';
+  color: 'blue' | 'green' | 'orange' | 'amber' | 'red' | 'slate';
   subtitle?: string;
   trend?: { value: number; label: string };
 }
@@ -23,6 +23,12 @@ const colorMap = {
     icon: 'bg-amber-500',
     text: 'text-amber-600',
   },
+  amber: {
+    bg: 'bg-amber-50',
+    border: 'border-amber-100',
+    icon: 'bg-amber-500',
+    text: 'text-amber-600',
+  },
   red: { bg: 'bg-red-50', border: 'border-red-100', icon: 'bg-red-500', text: 'text-red-600' },
   slate: {
     bg: 'bg-slate-50',
@@ -33,7 +39,7 @@ const colorMap = {
 };
 
 export default function StatCard({ title, value, icon, color, subtitle, trend }: StatCardProps) {
-  const c = colorMap[color];
+  const c = colorMap[color] || colorMap.slate; // Fallback to slate if color is missing
   return (
     <div className={`${c.bg} border ${c.border} rounded-2xl p-5 flex items-start gap-4`}>
       <div className={`${c.icon} text-white p-3 rounded-xl shrink-0`}>{icon}</div>

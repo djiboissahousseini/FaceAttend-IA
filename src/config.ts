@@ -7,3 +7,5 @@ export const API_URL =
   typeof window !== 'undefined' && window.location.hostname === 'localhost'
     ? 'http://localhost:8000'
     : TUNNEL_BACKEND_URL;
+
+export const NETWORK_IP = '10.142.14.9';

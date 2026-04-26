@@ -1,12 +1,25 @@
 import { useEffect, useState, useRef } from 'react';
-import { Search, Plus, X, Upload, Camera, Loader2, Trash2, Mail, User, Key } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  X,
+  Upload,
+  Camera,
+  Loader2,
+  Trash2,
+  Mail,
+  User,
+  Key,
+  Eye,
+  Edit2,
+} from 'lucide-react';
 import { getPhotoUrl } from '../utils/image';
 import { Teacher } from '../types';
 
 import { API_URL } from '../config';
 const API = API_URL;
 
-export default function Teachers() {
+export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => void }) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -15,13 +28,16 @@ export default function Teachers() {
     name: '',
     email: '',
     password: '',
+    pin_code: '',
     photo_url: '',
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPin, setShowPin] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,7 +67,8 @@ export default function Teachers() {
     setForm({
       name: teacher.name,
       email: teacher.email,
-      password: '', // On ne récupère pas le mot de passe actuel pour sécurité
+      password: teacher.password || '', // Visible pour l'admin
+      pin_code: teacher.pin_code || '',
       photo_url: teacher.photo_url || '',
     });
     setEditingId(teacher.id);
@@ -76,7 +93,7 @@ export default function Teachers() {
 
       setShowModal(false);
       setEditingId(null);
-      setForm({ name: '', email: '', password: '', photo_url: '' });
+      setForm({ name: '', email: '', password: '', pin_code: '', photo_url: '' });
       fetchTeachers();
     } catch (_err) {
       const errorMessage = (_err as Error).message || "Erreur lors de l'enregistrement";
@@ -88,8 +105,14 @@ export default function Teachers() {
 
   // Note: Il n'y a pas d'endpoint DELETE /api/teachers dans le backend actuel
   // Je vais ajouter un message d'information ou omettre la fonction si non supportée
-  async function deleteTeacher(_id: string) {
-    alert("La suppression des enseignants n'est pas encore implémentée dans le backend.");
+  async function deleteTeacher(id: number) {
+    try {
+      const res = await fetch(`${API}/api/teachers/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchTeachers();
+      else alert('Erreur lors de la suppression');
+    } catch (err) {
+      console.error(err);
+    }
     setDeletingId(null);
   }
 
@@ -168,7 +191,7 @@ export default function Teachers() {
                     Enseignant
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">
-                    Contact
+                    Contact & Sécurité
                   </th>
                   <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">
                     Actions
@@ -188,16 +211,40 @@ export default function Teachers() {
                           alt={teacher.name}
                           className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm"
                         />
-                        <div>
-                          <p className="text-slate-800 font-medium text-sm">{teacher.name}</p>
-                          <p className="text-slate-400 text-xs">ID: {teacher.id}</p>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <p className="text-slate-800 font-bold text-sm truncate">
+                            {teacher.name}
+                          </p>
+                          <p className="text-slate-400 text-[10px] font-mono uppercase tracking-tighter">
+                            ID: {teacher.id}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex items-center gap-2 text-slate-600 text-sm">
-                        <Mail size={14} className="text-slate-400" />
-                        {teacher.email}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 text-slate-600 text-sm">
+                          <Mail size={14} className="text-slate-400" />
+                          {teacher.email}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                            <span className="text-[9px] font-black uppercase text-blue-400 tracking-tighter">
+                              PIN:
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-blue-600">
+                              {teacher.pin_code || '0000'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">
+                              PWD:
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-slate-700">
+                              {teacher.password || 'password123'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -261,7 +308,7 @@ export default function Teachers() {
                 onClick={() => {
                   setShowModal(false);
                   setEditingId(null);
-                  setForm({ name: '', email: '', password: '', photo_url: '' });
+                  setForm({ name: '', email: '', password: '', pin_code: '', photo_url: '' });
                 }}
                 className="p-2 hover:bg-white/10 rounded-xl transition-colors"
               >
@@ -295,17 +342,52 @@ export default function Teachers() {
                     className="w-full px-4 py-3 text-sm border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
-                    Code PIN (Caméra) / Mot de passe {editingId && '(Laisser vide pour ignorer)'}
-                  </label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder="••••••••"
-                    className="w-full px-4 py-3 text-sm border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
+                      Code PIN (4 chiffres)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        maxLength={4}
+                        value={form.pin_code}
+                        onChange={(e) =>
+                          setForm({ ...form, pin_code: e.target.value.replace(/\D/g, '') })
+                        }
+                        placeholder="0000"
+                        className="w-full px-4 py-3 text-sm font-mono font-bold border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPin(!showPin)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
+                      >
+                        {showPin ? <X size={16} /> : <Plus size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
+                      Dashboard Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        placeholder={editingId ? '••••••••' : 'Par défaut: password123'}
+                        className="w-full px-4 py-3 text-sm border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
+                      >
+                        {showPassword ? <X size={16} /> : <Plus size={16} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

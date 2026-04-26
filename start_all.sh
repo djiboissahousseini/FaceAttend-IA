@@ -8,7 +8,13 @@ echo "🚀 Lancement de FaceAttend..."
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$PROJECT_ROOT"
 
-# 1. Libérer les ports et fermer les navigateurs
+# 1. Détecter l'adresse IP locale
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+echo "🌐 Adresse Réseau : http://$LOCAL_IP:5173"
+echo "📱 Accès Mobile (Étudiant) : http://$LOCAL_IP:5173/portal"
+echo "--------------------------------------------------------"
+
+# 2. Libérer les ports et fermer les navigateurs
 echo "🧹 Nettoyage des ports et des navigateurs..."
 fuser -k 8000/tcp 5173/tcp 2>/dev/null || true
 pkill -9 -f "chrome" 2>/dev/null
@@ -17,7 +23,7 @@ pkill -9 -f "chromium" 2>/dev/null
 pkill -9 -f "msedge" 2>/dev/null
 sleep 2
 
-# 2. Lancer le Backend en arrière-plan
+# 3. Lancer le Backend en arrière-plan
 echo "🚀 Démarrage du Backend (FastAPI)..."
 cd "$PROJECT_ROOT/backend"
 # Utilisation du chemin relatif pour le venv
@@ -30,7 +36,7 @@ echo "   Backend PID: $BACKEND_PID"
 sleep 3
 echo "   Backend prêt ✅"
 
-# 3. Lancer le Frontend
+# 4. Lancer le Frontend
 echo "💻 Démarrage du Frontend (Vite)..."
 cd "$PROJECT_ROOT"
 
@@ -71,5 +77,5 @@ cleanup() {
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM
 
-# npm run dev est bloquant
-npm run dev
+# npm run dev avec --host pour l'accès réseau
+npm run dev -- --host

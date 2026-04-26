@@ -15,7 +15,7 @@ import {
 import { Student } from '../types';
 import StudentDashboard from './StudentDashboard';
 
-import { API_URL } from '../config';
+import { API_URL, NETWORK_IP } from '../config';
 import { getPhotoUrl } from '../utils/image';
 const API = API_URL;
 
@@ -32,7 +32,7 @@ export default function AdminStudentSpace() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [showQR, setShowQR] = useState(false);
-  const [deviceIP, setDeviceIP] = useState(window.location.hostname);
+  const [deviceIP, setDeviceIP] = useState(NETWORK_IP);
 
   useEffect(() => {
     fetchStudents();

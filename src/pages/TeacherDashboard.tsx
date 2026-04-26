@@ -20,6 +20,11 @@ import {
   Lock,
   Users,
   TrendingUp,
+  MonitorPlay,
+  PowerOff,
+  PlayCircle,
+  XCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { DashboardStats, Course, Session, Teacher } from '../types';
 import { checkHealth, getDashboardStats, getCourses, getSessions, getTeachers } from '../lib/api';
@@ -71,7 +76,6 @@ export default function TeacherDashboard() {
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loggedInTeacher, setLoggedInTeacher] = useState<Teacher | null>(() => {
-    // Tenter de récupérer le prof en mémoire (pour résister au rafraîchissement F5)
     const parsed = parseTeacherFromStorage(localStorage.getItem('faceattend_simulated_teacher'));
     if (!parsed) localStorage.removeItem('faceattend_simulated_teacher');
     return parsed;
@@ -79,8 +83,10 @@ export default function TeacherDashboard() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
+  const [activeClassroom, setActiveClassroom] = useState<string>('Salle B1');
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
 
-  // Sauvegarder le prof dès qu'il change
   useEffect(() => {
     if (loggedInTeacher) {
       localStorage.setItem('faceattend_simulated_teacher', JSON.stringify(loggedInTeacher));
@@ -101,20 +107,9 @@ export default function TeacherDashboard() {
     try {
       const res = await fetch(`${API_URL}/api/teachers/${id}/security`);
       if (res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          is_blocked?: unknown;
-          failed_attempts?: unknown;
-          password?: unknown;
-        } | null;
-        if (
-          data &&
-          typeof data.is_blocked === 'boolean' &&
-          typeof data.failed_attempts === 'number' &&
-          typeof data.password === 'string'
-        ) {
-          setSecurityInfo(
-            data as { is_blocked: boolean; failed_attempts: number; password: string }
-          );
+        const data = (await res.json().catch(() => null)) as any;
+        if (data && typeof data.is_blocked === 'boolean') {
+          setSecurityInfo(data);
         }
       }
     } catch (e) {
@@ -150,7 +145,6 @@ export default function TeacherDashboard() {
     }
   };
 
-  // 1. Initial Load: Check auth from global localStorage
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -169,7 +163,6 @@ export default function TeacherDashboard() {
             const teachers = await getTeachers();
             setTeachersList(Array.isArray(teachers) ? (teachers as Teacher[]) : []);
           } catch (_e) {
-            console.error('Impossible de charger la liste des enseignants.');
             setTeachersList([]);
           }
         }
@@ -182,30 +175,18 @@ export default function TeacherDashboard() {
     initAuth();
   }, []);
 
-  useEffect(() => {
-    if (loggedInTeacher && localStorage.getItem('faceattend_role') === 'admin') {
-      fetchSecurity(loggedInTeacher.id.toString());
-    }
-  }, [loggedInTeacher]);
-
   const handleLogout = () => {
     const role = localStorage.getItem('faceattend_role');
-
-    // Si c'est un admin qui inspectait, on annule juste la sélection du prof
-    // pour le renvoyer à l'écran de sélection de la Simulation Admin.
     if (role === 'admin' && window.location.pathname !== '/teacher') {
       localStorage.removeItem('faceattend_simulated_teacher');
       setLoggedInTeacher(null);
       return;
     }
-
-    // Sinon c'est un prof, on se déconnecte vraiment de l'espace
     setLoggedInTeacher(null);
     localStorage.removeItem('faceattend_teacher_auth');
     localStorage.removeItem('faceattend_user');
   };
 
-  // ─── Connection check ─────────────────────────────────────────────────────
   const checkConnection = useCallback(async () => {
     setConn((prev) => ({ ...prev, api: 'checking' }));
     const t0 = performance.now();
@@ -228,7 +209,6 @@ export default function TeacherDashboard() {
     }
   }, []);
 
-  // ─── Data fetch (Only when logged in) ──────────────────────────────────────
   const fetchData = useCallback(async () => {
     if (!loggedInTeacher) return;
     setLoading(true);
@@ -239,15 +219,11 @@ export default function TeacherDashboard() {
         getCourses(),
         getSessions(),
       ]);
-      setStats(
-        dashboardStats && typeof dashboardStats === 'object'
-          ? (dashboardStats as DashboardStats)
-          : null
-      );
+      setStats(dashboardStats as DashboardStats);
       setAllCourses(Array.isArray(courseData) ? (courseData as Course[]) : []);
       setAllSessions(Array.isArray(sessionData) ? (sessionData as Session[]) : []);
     } catch (_e) {
-      setError('Impossible de charger les données. Assurez-vous que le backend est démarré.');
+      setError('Impossible de charger les données.');
     } finally {
       setLoading(false);
     }
@@ -263,14 +239,50 @@ export default function TeacherDashboard() {
     }
   }, [loggedInTeacher, checkConnection, fetchData]);
 
-  // ─── FILTER DATA FOR LOGGED IN TEACHER ONLY ───────────────────────────────
-  const myCourses = allCourses.filter((c) => c.teacher_name === loggedInTeacher?.name);
-  const mySessions = allSessions.filter((s) => s.teacher_name === loggedInTeacher?.name);
+  useEffect(() => {
+    if (!activeClassroom) return;
+    const fetchActive = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/sessions/active?room=${encodeURIComponent(activeClassroom)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setActiveSession(data?.id ? data : null);
+        } else {
+          setActiveSession(null);
+        }
+      } catch {
+        setActiveSession(null);
+      }
+    };
+    fetchActive();
+    const inv = setInterval(fetchActive, 10000);
+    return () => clearInterval(inv);
+  }, [activeClassroom]);
+
+  const sendCommand = (cmd: string, payload?: unknown) => {
+    const commandData = {
+      command: cmd,
+      payload: payload,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(`faceattend_cmd_${activeClassroom}`, JSON.stringify(commandData));
+  };
+
+  // ─── FILTER LOGIC (SECURED) ────────────────────────────────────────────────
+  const myCourses = allCourses.filter((c) => {
+    if (!loggedInTeacher?.name) return false;
+    const tName = c.teacher_name || "";
+    return tName === loggedInTeacher.name || tName.includes(loggedInTeacher.name);
+  });
+  
+  const mySessions = allSessions.filter((s) => 
+    String(s.teacher_id) === String(loggedInTeacher?.id) || 
+    (loggedInTeacher?.name && s.teacher_name === loggedInTeacher.name)
+  );
 
   const todayStr = new Date().toISOString().split('T')[0];
   const myTodaySessions = mySessions.filter((s) => s.session_date === todayStr);
 
-  // ─── Teacher Login Handler ──────────────────────────────────────────────
   const handleTeacherLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -281,563 +293,347 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ email: loginEmail, password: loginPass }),
       });
       if (res.ok) {
-        const data = (await res.json().catch(() => null)) as unknown;
+        const data = await res.json();
         if (isTeacher(data)) {
           localStorage.setItem('faceattend_teacher_auth', 'true');
           localStorage.setItem('faceattend_user', JSON.stringify(data));
           setLoggedInTeacher(data);
-        } else {
-          alert('Réponse de connexion invalide. Veuillez réessayer.');
         }
       } else {
-        alert('Identifiants incorrects ou compte bloqué.');
+        alert('Identifiants incorrects.');
       }
     } catch (_err) {
-      alert('Erreur de connexion au serveur.');
+      alert('Erreur de connexion.');
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // ─── Login Screen Render (Dual Mode) ─────────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-cyan-400 font-mono tracking-widest animate-pulse uppercase">
-        Initialisation du Portail...
-      </div>
-    );
-  }
+  if (authLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-cyan-400 font-mono tracking-widest animate-pulse uppercase">Initialisation...</div>;
 
   if (!loggedInTeacher) {
-    const isAdminMode =
-      localStorage.getItem('faceattend_role') === 'admin' &&
-      window.location.pathname !== '/teacher';
-
+    const isAdminMode = localStorage.getItem('faceattend_role') === 'admin' && window.location.pathname !== '/teacher';
     if (isAdminMode) {
       return (
         <div className="min-h-screen bg-[#050a10] flex items-center justify-center font-mono p-4">
           <div className="w-full max-w-md bg-slate-900 border border-[#00f0ff]/30 p-8 shadow-[0_0_50px_rgba(0,240,255,0.1)]">
             <div className="flex flex-col items-center mb-8">
-              <div className="w-16 h-16 rounded-full bg-[#00f0ff]/10 flex items-center justify-center border border-[#00f0ff]/50 mb-4">
-                <ShieldCheck size={32} className="text-[#00f0ff]" />
-              </div>
-              <h1 className="text-xl font-bold text-white tracking-widest uppercase">
-                Simulation Admin
-              </h1>
-              <p className="text-[#00f0ff]/60 text-[10px] mt-1 tracking-widest text-center uppercase">
-                Mode Inspection : Sélectionnez un Profil
-              </p>
+              <ShieldCheck size={32} className="text-[#00f0ff] mb-4" />
+              <h1 className="text-xl font-bold text-white tracking-widest uppercase text-center">Simulation Admin</h1>
             </div>
-
             <div className="space-y-4">
-              <select
-                value={selectedTeacherId}
-                onChange={(e) => setSelectedTeacherId(e.target.value)}
-                className="w-full bg-black/50 border border-[#00f0ff]/30 text-white text-sm p-3 outline-none focus:border-[#00f0ff]"
-              >
+              <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-black/50 border border-[#00f0ff]/30 text-white text-sm p-3 outline-none">
                 <option value="">-- CHOISIR UN ENSEIGNANT --</option>
-                {teachersList.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
+                {teachersList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
-
-              <button
-                onClick={() => {
-                  const teacher = teachersList.find((t) => t.id.toString() === selectedTeacherId);
-                  if (teacher) setLoggedInTeacher(teacher);
-                }}
-                disabled={!selectedTeacherId}
-                className="w-full bg-[#00f0ff] hover:bg-[#00c0cc] text-slate-900 font-bold uppercase tracking-widest py-3 transition-all disabled:opacity-50"
-              >
-                Inspecter le Dashboard
-              </button>
+              <button onClick={() => {
+                const teacher = teachersList.find((t) => t.id.toString() === selectedTeacherId);
+                if (teacher) setLoggedInTeacher(teacher);
+              }} disabled={!selectedTeacherId} className="w-full bg-[#00f0ff] hover:bg-[#00c0cc] text-slate-900 font-bold uppercase py-3">Inspecter</button>
             </div>
           </div>
         </div>
       );
     }
-
-    // Sinon, c'est le portail prof pur
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center font-mono p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-blue-500/30 p-8 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
+        <div className="w-full max-w-md bg-slate-900 border border-blue-500/30 p-8">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/50 mb-4 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-              <GraduationCap size={32} className="text-blue-400" />
-            </div>
-            <h1 className="text-xl font-bold text-white tracking-widest uppercase">
-              Portail Académique
-            </h1>
-            <p className="text-blue-400/60 text-[10px] mt-1 tracking-widest uppercase">
-              Espace Enseignant Sécurisé
-            </p>
+            <GraduationCap size={32} className="text-blue-400 mb-4" />
+            <h1 className="text-xl font-bold text-white uppercase tracking-widest">Portail Académique</h1>
           </div>
-
           <form onSubmit={handleTeacherLogin} className="space-y-5">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                Email Professionnel
-              </label>
-              <input
-                type="email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-black/50 border border-slate-700 text-white text-sm p-3 outline-none focus:border-blue-500 transition-colors"
-                placeholder="pr.nom@univ.dz"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                Mot de Passe
-              </label>
-              <input
-                type="password"
-                value={loginPass}
-                onChange={(e) => setLoginPass(e.target.value)}
-                className="w-full bg-black/50 border border-slate-700 text-white text-sm p-3 outline-none focus:border-blue-500 transition-colors"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-4 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-            >
-              <Unlock size={16} />
-              Accéder à ma Session
-            </button>
+            <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-black/50 border border-slate-700 text-white p-3" placeholder="Email Pro" required />
+            <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full bg-black/50 border border-slate-700 text-white p-3" placeholder="Mot de Passe" required />
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 flex items-center justify-center gap-2"><Unlock size={16} /> Connexion</button>
           </form>
-
-          <p className="text-slate-600 text-[10px] mt-8 text-center leading-relaxed">
-            Ce portail est exclusivement réservé au corps enseignant.
-            <br />
-            Toute tentative d'accès non autorisée est enregistrée.
-          </p>
         </div>
       </div>
     );
   }
 
-  // ─── Status helpers ───────────────────────────────────────────────────────
-  const StatusDot = ({ status }: { status: 'online' | 'offline' | 'checking' | 'unknown' }) => {
-    if (status === 'checking')
-      return <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse inline-block" />;
-    if (status === 'online')
-      return (
-        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-      );
-    return <span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />;
-  };
-
-  // ─── Stat Card ────────────────────────────────────────────────────────────
-  const StatCard = ({
-    title,
-    value,
-    icon,
-    color,
-    subtitle,
-  }: {
-    title: string;
-    value: string | number;
-    icon: React.ReactNode;
-    color: 'blue' | 'green' | 'purple' | 'orange';
-    subtitle?: string;
-  }) => {
-    const colors = {
-      blue: 'bg-blue-500 shadow-blue-500/30',
-      green: 'bg-emerald-500 shadow-emerald-500/30',
-      purple: 'bg-violet-500 shadow-violet-500/30',
-      orange: 'bg-orange-500 shadow-orange-500/30',
-    };
-    return (
-      <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</p>
-            <p className="text-3xl font-bold text-slate-800 mt-1 leading-none">{value}</p>
-            {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
-          </div>
-          <div className={`p-2.5 rounded-xl text-white shadow-lg ${colors[color]}`}>{icon}</div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-4">
-            <img
-              src={
-                getPhotoUrl(loggedInTeacher?.photo_url) ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(loggedInTeacher?.name || 'User')}&background=020617&color=00f0ff`
-              }
-              alt={loggedInTeacher?.name || 'User'}
-              className="w-16 h-16 rounded-2xl shadow-md border-2 border-slate-200"
-            />
+            <img src={getPhotoUrl(loggedInTeacher?.photo_url) || `https://ui-avatars.com/api/?name=${encodeURIComponent(loggedInTeacher?.name || 'User')}`} alt="Avatar" className="w-16 h-16 rounded-2xl border-2 border-slate-200" />
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">
-                Bienvenue, Pr. {loggedInTeacher?.name}
-              </h1>
-              <p className="text-slate-500 text-sm mt-0.5">{loggedInTeacher?.email}</p>
+              <h1 className="text-2xl font-bold text-slate-800">Pr. {loggedInTeacher?.name}</h1>
+              <p className="text-slate-500 text-sm">{loggedInTeacher?.email}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                checkConnection();
-                fetchData();
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-medium rounded-xl transition-colors shadow-sm"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Actualiser
-            </button>
-            <button
-              onClick={handleLogout}
-              className={`flex items-center gap-2 px-4 py-2 border text-sm font-medium rounded-xl transition-colors shadow-sm ${
-                localStorage.getItem('faceattend_role') === 'admin'
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-100'
-                  : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-100'
-              }`}
-            >
-              {localStorage.getItem('faceattend_role') === 'admin' ? (
-                <>
-                  <X size={14} />
-                  Quitter l'Inspection
-                </>
-              ) : (
-                <>
-                  <LogOut size={14} />
-                  Déconnecter
-                </>
-              )}
-            </button>
+            <button onClick={() => { checkConnection(); fetchData(); }} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Actualiser</button>
+            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl"><LogOut size={14} /> Déconnexion</button>
           </div>
         </div>
 
-        {/* ── CONNECTION STATUS PANEL ────────────────────────────────────────── */}
+        {/* Diagnostic Panel */}
         <div className="bg-slate-900 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-lg">
           <div className="sm:col-span-3 flex items-center gap-2 mb-1">
             <Activity size={16} className="text-cyan-400" />
-            <h2 className="text-white text-sm font-bold uppercase tracking-widest">
-              Diagnostic Système & Reconnaissance IA
-            </h2>
-            <span className="ml-auto text-slate-500 text-xs">
-              {conn.lastChecked ? `Vérifié à ${conn.lastChecked}` : 'En cours…'}
-            </span>
+            <h2 className="text-white text-xs font-bold uppercase tracking-widest">Diagnostic IA & Système</h2>
           </div>
-
-          <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center ${conn.api === 'online' ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}
-            >
-              <Server
-                size={18}
-                className={conn.api === 'online' ? 'text-emerald-400' : 'text-red-400'}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-bold">API Backend</p>
-              <p className="text-slate-400 text-[10px] truncate">{API_URL}</p>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <StatusDot status={conn.api} />
-            </div>
+          <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3"><Server size={18} className="text-emerald-400" /> <span className="text-white text-xs font-bold">API Backend</span></div>
+            <div className={`w-2.5 h-2.5 rounded-full ${conn.api === 'online' ? 'bg-emerald-400' : 'bg-red-400'} animate-pulse`} />
           </div>
-
-          <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center ${conn.db === 'online' ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}
-            >
-              <Database
-                size={18}
-                className={conn.db === 'online' ? 'text-emerald-400' : 'text-red-400'}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-bold">Base de Données</p>
-              <p className="text-slate-400 text-[10px]">PostgreSQL (Local)</p>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <StatusDot status={conn.db} />
-            </div>
+          <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3"><Database size={18} className="text-emerald-400" /> <span className="text-white text-xs font-bold">Base de Données</span></div>
+            <div className={`w-2.5 h-2.5 rounded-full ${conn.db === 'online' ? 'bg-emerald-400' : 'bg-red-400'} animate-pulse`} />
           </div>
-
-          <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/20">
-              <Zap size={18} className="text-cyan-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-bold">Latence IA</p>
-              <p className="text-slate-400 text-[10px]">Modèle FaceNet</p>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-xl font-bold text-cyan-400">
-                {conn.latency !== null ? `${conn.latency}` : '—'}
-              </span>
-              <span className="text-slate-500 text-[10px]">ms</span>
-            </div>
+          <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3"><Zap size={18} className="text-cyan-400" /> <span className="text-white text-xs font-bold">Latence IA</span></div>
+            <span className="text-cyan-400 font-bold">{conn.latency || '--'} ms</span>
           </div>
-
-          {conn.api === 'offline' && (
-            <div className="sm:col-span-3 text-xs text-red-400 mt-2">
-              Le backend d'intelligence artificielle est déconnecté. Le système ne reconnaîtra pas
-              les étudiants.
-            </div>
-          )}
         </div>
 
-        {/* ── SECURITY MANAGEMENT PANEL (Admin Only) ─────────────────────────── */}
+        {/* Security Info (Only visible if Admin is inspecting) */}
         {localStorage.getItem('faceattend_role') === 'admin' && securityInfo && (
-          <div className="bg-slate-900 border-2 border-amber-500/30 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-[0_0_30px_rgba(245,158,11,0.15)] animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="sm:col-span-3 flex items-center gap-2 mb-1">
-              <ShieldCheck size={16} className="text-amber-400" />
-              <h2 className="text-white text-sm font-bold uppercase tracking-widest">
-                Contrôle de Sécurité & Accès
-              </h2>
-              <span className="ml-auto text-amber-500/60 text-[10px] font-mono font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">
-                MODE INSPECTION ADMIN
-              </span>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center ${securityInfo.is_blocked ? 'bg-red-500/20' : 'bg-emerald-500/20'}`}
-              >
-                {securityInfo.is_blocked ? (
-                  <Lock size={18} className="text-red-400" />
-                ) : (
-                  <Unlock size={18} className="text-emerald-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-xs font-bold">Statut du Compte</p>
-                <p
-                  className={
-                    securityInfo.is_blocked
-                      ? 'text-red-400 text-[10px]'
-                      : 'text-emerald-400 text-[10px]'
-                  }
-                >
-                  {securityInfo.is_blocked ? 'COMPTE BLOQUÉ' : 'ACCÈS AUTORISÉ'}
-                </p>
-              </div>
-              <button
-                onClick={toggleBlock}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
-                  securityInfo.is_blocked
-                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
-                    : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}
-              >
-                {securityInfo.is_blocked ? 'Débloquer' : 'Bloquer'}
-              </button>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/20">
-                <ShieldAlert size={18} className="text-amber-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-xs font-bold">Échecs Connexion</p>
-                <p className="text-slate-400 text-[10px]">
-                  {securityInfo.failed_attempts} tentative(s)
-                </p>
-              </div>
-              <div className="flex gap-1">
-                {[...Array(3)].map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-1.5 h-1.5 rounded-full ${i < securityInfo.failed_attempts ? 'bg-red-500 animate-pulse' : 'bg-slate-600'}`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/20">
-                <Key size={18} className="text-blue-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-xs font-bold">Mot de Passe Actuel</p>
-                <p className="text-slate-400 text-[10px] font-mono tracking-wider">
-                  {securityInfo.password}
-                </p>
-              </div>
-              <button
-                onClick={resetPass}
-                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold uppercase rounded-lg transition-all shadow-lg shadow-blue-500/20"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
+           <div className="bg-white border-2 border-amber-200 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-sm">
+             <div className="sm:col-span-3 flex items-center gap-2 mb-2">
+                <ShieldAlert size={16} className="text-amber-500" />
+                <h3 className="text-sm font-black uppercase text-slate-800">Contrôle de Sécurité (Admin)</h3>
+             </div>
+             <div className="bg-slate-50 p-4 rounded-xl flex items-center justify-between">
+                <div><p className="text-[10px] font-bold text-slate-400 uppercase">Statut Accès</p><p className={`font-bold ${securityInfo.is_blocked ? 'text-red-500' : 'text-emerald-500'}`}>{securityInfo.is_blocked ? 'BLOQUÉ' : 'ACTIF'}</p></div>
+                <button onClick={toggleBlock} className="bg-slate-200 px-3 py-1 rounded-lg text-xs font-bold">{securityInfo.is_blocked ? 'Débloquer' : 'Bloquer'}</button>
+             </div>
+             <div className="bg-slate-50 p-4 rounded-xl">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Échecs</p>
+                <p className="font-bold text-slate-800">{securityInfo.failed_attempts} tentatives</p>
+             </div>
+             <div className="bg-slate-50 p-4 rounded-xl flex items-center justify-between">
+                <div><p className="text-[10px] font-bold text-slate-400 uppercase">Mot de Passe</p><p className="font-mono text-xs">{securityInfo.password}</p></div>
+                <button onClick={resetPass} className="bg-blue-100 text-blue-600 px-3 py-1 rounded-lg text-xs font-bold">Reset</button>
+             </div>
+           </div>
         )}
 
         {error && (
-          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
-            <AlertCircle size={16} className="text-red-500 shrink-0" />
-            <p className="text-red-600 text-sm">{error}</p>
+          <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-center gap-3 text-red-600 text-sm">
+            <AlertCircle size={16} /> {error}
           </div>
         )}
 
-        {/* ── STAT CARDS (Filtered) ─────────────────────────────────────────── */}
-        {loading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-28 bg-slate-200/50 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title="Mes Cours"
-              value={myCourses.length}
-              icon={<BookOpen size={20} />}
-              color="blue"
-              subtitle="Enseignant principal"
-            />
-            <StatCard
-              title="Mes Séances (Auj)"
-              value={myTodaySessions.length}
-              icon={<Calendar size={20} />}
-              color="green"
-              subtitle="Programmées aujourd'hui"
-            />
-            <StatCard
-              title="Global: Étudiants"
-              value={stats?.totalStudents ?? 0}
-              icon={<Users size={20} />}
-              color="purple"
-              subtitle="Inscrits à l'institut"
-            />
-            <StatCard
-              title="Global: Taux Présence"
-              value={stats?.attendanceRate !== undefined ? `${stats.attendanceRate}%` : 'N/A'}
-              icon={<TrendingUp size={20} />}
-              color="orange"
-              subtitle="Moyenne aujourd'hui"
-            />
-          </div>
-        )}
-
-        {/* ── COURSES & SESSIONS (Filtered) ─────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Séances du Jour */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-blue-500" />
-                <h3 className="font-semibold text-slate-800">Séances du Jour</h3>
-              </div>
-              <span className="ml-auto text-xs bg-emerald-100 px-2 py-0.5 rounded-lg text-emerald-600 font-bold">
-                {myTodaySessions.length}
-              </span>
+        {/* Stat Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-start mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase">Mes Cours</p>
+              <BookOpen size={16} className="text-blue-500" />
             </div>
-            <div className="divide-y divide-slate-50">
-              {myTodaySessions.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-8">
-                  Aucune séance prévue pour vous aujourd'hui.
-                </p>
-              ) : (
-                myTodaySessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 text-sm">{session.course_name}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Groupe <span className="font-bold">{session.group_name}</span> •{' '}
-                        {session.classroom || 'Salle inconnue'}
-                      </p>
-                    </div>
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-emerald-100">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Planifiée
+            <p className="text-3xl font-bold text-slate-800">{myCourses.length}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+             <div className="flex justify-between items-start mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase">Séances (Auj)</p>
+              <Calendar size={16} className="text-emerald-500" />
+            </div>
+            <p className="text-3xl font-bold text-slate-800">{myTodaySessions.length}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+             <div className="flex justify-between items-start mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase">Étudiants Global</p>
+              <Users size={16} className="text-purple-500" />
+            </div>
+            <p className="text-3xl font-bold text-slate-800">{stats?.totalStudents || 0}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+             <div className="flex justify-between items-start mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase">Présence</p>
+              <TrendingUp size={16} className="text-orange-500" />
+            </div>
+            <p className="text-3xl font-bold text-slate-800">{stats?.attendanceRate || 0}%</p>
+          </div>
+        </div>
+
+        {/* Content Tabs */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr,400px] gap-6">
+          <div className="space-y-6">
+            {/* Monitor Header */}
+            <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+               <div className="relative z-10">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <MonitorPlay className="text-blue-400" size={24} />
+                    Monitoring de la Salle
+                  </h2>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                     </span>
+                    <span className="text-blue-400 text-xs font-bold uppercase tracking-widest">Liaison Terminal Active</span>
                   </div>
-                ))
+               </div>
+
+               <div className="flex items-center gap-3 relative z-10">
+                  <select 
+                    value={activeClassroom} 
+                    onChange={(e) => setActiveClassroom(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'].map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <button 
+                    onClick={() => window.open('/camera', '_blank')}
+                    className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all shadow-lg shadow-blue-600/20"
+                    title="Ouvrir le terminal"
+                  >
+                    <ExternalLink size={18} />
+                  </button>
+               </div>
+            </div>
+
+            {/* Active Session / Controls */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
+              {activeSession ? (
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                  <div>
+                    <span className="bg-blue-100 text-blue-600 text-[10px] font-black uppercase px-2 py-1 rounded-lg mb-2 inline-block">Session en cours</span>
+                    <h3 className="text-2xl font-black text-slate-900 leading-tight">{activeSession.course_name}</h3>
+                    <p className="text-slate-500 font-medium">Groupe {activeSession.group_name} • {activeSession.classroom}</p>
+                  </div>
+                  <div className="flex gap-3 w-full md:w-auto">
+                    <button 
+                      onClick={() => sendCommand('OVERRIDE_TEACHER')}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      <Unlock size={18} /> Ouvrir
+                    </button>
+                    <button 
+                      onClick={() => sendCommand('FORCE_STANDBY')}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-red-500/20"
+                    >
+                      <PowerOff size={18} /> Fermer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-10 text-center space-y-4">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
+                    <Calendar size={32} />
+                  </div>
+                  <div className="max-w-xs mx-auto">
+                    <h3 className="text-slate-800 font-bold">Aucune session active</h3>
+                    <p className="text-slate-500 text-sm">Sélectionnez une session dans l'agenda ou attendez l'heure du cours.</p>
+                  </div>
+                </div>
               )}
             </div>
+
+            {/* Tabs List */}
+            <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+               <div className="flex bg-slate-50 p-1.5 border-b">
+                  <button 
+                    onClick={() => setActiveTab('live')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'live' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <Activity size={14} /> Sessions du Jour
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('master')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'master' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <BookOpen size={14} /> Agenda Master
+                  </button>
+               </div>
+
+               <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
+                  {activeTab === 'live' ? (
+                    myTodaySessions.length === 0 ? (
+                      <p className="p-12 text-center text-slate-400 text-sm italic">Aucun cours prévu aujourd'hui.</p>
+                    ) : (
+                      myTodaySessions.map(s => (
+                        <div key={s.id} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${s.id === activeSession?.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                                <Clock size={20} />
+                             </div>
+                             <div>
+                                <p className="font-bold text-slate-900">{s.course_name}</p>
+                                <p className="text-xs text-slate-500 font-medium">Groupe {s.group_name} • {s.start_time}</p>
+                             </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                             {s.id === activeSession?.id ? (
+                               <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse">
+                                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Live
+                               </span>
+                             ) : (
+                               <button 
+                                 onClick={() => sendCommand('FORCE_START_SESSION', { session_id: s.id })}
+                                 className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                 title="Lancer maintenant"
+                               >
+                                 <PlayCircle size={20} />
+                               </button>
+                             )}
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : (
+                    myCourses.length === 0 ? (
+                      <p className="p-12 text-center text-slate-400 text-sm italic">Aucun module assigné.</p>
+                    ) : (
+                      myCourses.map(c => (
+                        <div key={c.id} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                             <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-500 flex items-center justify-center">
+                                <BookOpen size={20} />
+                             </div>
+                             <div>
+                                <p className="font-bold text-slate-900">{c.name}</p>
+                                <p className="text-xs text-slate-500 font-medium">{c.course_code} • {c.room}</p>
+                             </div>
+                          </div>
+                          <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-full">
+                             {c.schedule_day}
+                          </span>
+                        </div>
+                      ))
+                    )
+                  )}
+               </div>
+            </div>
           </div>
 
-          {/* Mes Modules */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
-              <Calendar size={16} className="text-purple-500" />
-              <h3 className="font-semibold text-slate-800">Mes Modules d'Enseignement</h3>
-              <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-lg text-slate-600 font-bold">
-                {myCourses.length}
-              </span>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {myCourses.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-8">
-                  Vous n'avez aucun cours assigné dans la base.
-                </p>
-              ) : (
-                myCourses.map((course) => (
-                  <div
-                    key={course.id}
-                    className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 text-sm">{course.name}</p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Code: {course.course_code} • Salle: {course.room || 'Non assignée'}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-1 bg-blue-50 text-blue-600 rounded-lg shrink-0 border border-blue-100">
-                      {course.schedule_day || 'Jours variés'} {course.schedule_time}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          {/* Right Column: Mini Stats & History */}
+          <div className="space-y-6">
+             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <TrendingUp size={18} className="text-orange-500" />
+                  Performance Récente
+                </h3>
+                <div className="space-y-4">
+                   {mySessions.slice(0, 3).map(s => (
+                     <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                        <div className="min-w-0">
+                           <p className="text-xs font-bold text-slate-800 truncate">{s.course_name}</p>
+                           <p className="text-[10px] text-slate-400 uppercase font-bold">{s.session_date}</p>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-xs font-black text-blue-600">85%</p>
+                           <p className="text-[10px] text-slate-400 uppercase">Présence</p>
+                        </div>
+                     </div>
+                   ))}
+                   {mySessions.length === 0 && <p className="text-center text-slate-400 text-xs py-4">Aucune donnée historique.</p>}
+                </div>
+             </div>
 
-          {/* Historique */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden lg:col-span-2">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
-              <Clock size={16} className="text-emerald-500" />
-              <h3 className="font-semibold text-slate-800">Historique de Mes Séances</h3>
-              <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-lg text-slate-600 font-bold">
-                {mySessions.length}
-              </span>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {mySessions.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-8">
-                  Aucune séance enregistrée pour vos cours.
-                </p>
-              ) : (
-                mySessions.slice(0, 8).map((session) => (
-                  <div
-                    key={session.id}
-                    className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 text-sm">{session.course_name}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Groupe <span className="font-bold">{session.group_name}</span> •{' '}
-                        {session.classroom || 'Salle inconnue'}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-lg shrink-0 border border-blue-100">
-                      {new Date(session.session_date).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
+             <div className="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden">
+                <div className="relative z-10">
+                   <h3 className="font-bold text-lg mb-2">Centre d'Aide</h3>
+                   <p className="text-indigo-100 text-sm mb-4">Besoin d'assistance avec le terminal biométrique ?</p>
+                   <button className="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-sm font-bold transition-all">
+                      Consulter le Guide
+                   </button>
+                </div>
+                <GraduationCap size={120} className="absolute -bottom-10 -right-10 text-white/10 rotate-12" />
+             </div>
           </div>
         </div>
       </div>

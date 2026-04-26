@@ -28,3 +28,8 @@ __pycache__/
 
 frontend_url.txt
 backend_url.txt
+backend/uploads/
+backend/*.db
+public/models/
+test_students_photos/
+*.json

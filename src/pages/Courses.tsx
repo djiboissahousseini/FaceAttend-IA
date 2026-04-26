@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, BookOpen, Clock, MapPin, Users, X, ChevronDown } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  BookOpen,
+  Clock,
+  MapPin,
+  Users,
+  X,
+  ChevronDown,
+  Activity,
+} from 'lucide-react';
 import { Course, Department, Teacher } from '../types';
 
 import { API_URL } from '../config';
@@ -22,6 +32,7 @@ export default function Courses() {
     schedule_time: '',
     room: '',
     group_name: 'ALL',
+    course_type: 'Cours',
     absence_threshold: 5,
   });
   const [saving, setSaving] = useState(false);
@@ -75,6 +86,7 @@ export default function Courses() {
       schedule_time: course.schedule_time,
       room: course.room,
       group_name: course.group_name || 'ALL',
+      course_type: (course as any).course_type || 'Cours',
       absence_threshold: course.absence_threshold,
     });
     setEditingId(course.id);
@@ -115,9 +127,68 @@ export default function Courses() {
       schedule_time: '',
       room: '',
       group_name: 'ALL',
+      course_type: 'Cours',
       absence_threshold: 5,
     });
     fetchData();
+  }
+
+  const sendCommand = (cmd: string, payload?: any) => {
+    // On récupère la salle depuis le localStorage pour savoir à qui parler
+    const activeClassroom = localStorage.getItem('faceattend_camera_classroom') || '';
+    const commandData = {
+      command: cmd,
+      payload: payload,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(`faceattend_cmd_${activeClassroom}`, JSON.stringify(commandData));
+  };
+
+  async function handleLaunchSession(course: Course) {
+    const teacher = teachers.find((t) => t.name === course.teacher_name);
+    if (!teacher) {
+      alert('Erreur: Professeur non trouvé dans la base de données.');
+      return;
+    }
+
+    const now = new Date();
+    const sessionData = {
+      teacher_id: teacher.id,
+      course_name: course.name,
+      group_name: course.group_name || 'ALL',
+      classroom: course.room || 'Salle A',
+      session_date: now.toISOString().split('T')[0],
+      start_time: now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      end_time: '23:59',
+    };
+
+    if (
+      !confirm(
+        `Voulez-vous anticiper et lancer immédiatement la session de présence pour le cours "${course.name}" ?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(`SUCCÈS : La session pour "${course.name}" est maintenant ACTIVE.`);
+        if (data.id) {
+          sendCommand('FORCE_START_SESSION', { session_id: data.id });
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Erreur: ${err.detail || 'Impossible de lancer la session.'}`);
+      }
+    } catch (err) {
+      alert('Erreur réseau lors du lancement.');
+    }
   }
 
   const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -226,20 +297,23 @@ export default function Courses() {
                     </div>
                   )}
                 </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <Users size={13} className="text-slate-400" />
-                    <span className="text-slate-500 text-xs">
-                      {enrollCounts[course.id] ?? 0} étudiants
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400 text-xs">Seuil:</span>
-                    <span className="bg-red-50 text-red-600 text-xs font-semibold px-1.5 py-0.5 rounded-md">
-                      {course.absence_threshold}
-                    </span>
-                  </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleLaunchSession(course)}
+                    className="flex-[2] py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition-all flex items-center justify-center gap-2 shadow-sm"
+                    title="Lancement Anticipé"
+                  >
+                    <Activity size={14} />
+                    Lancer
+                  </button>
+                  <button
+                    onClick={() => handleEdit(course)}
+                    className="flex-1 py-2 px-3 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                    title="Modifier le cours"
+                  >
+                    <Clock size={14} />
+                    Détails
+                  </button>
                 </div>
               </div>
             );
@@ -300,7 +374,7 @@ export default function Courses() {
                       onChange={(e) => setForm({ ...form, semester: e.target.value })}
                       className="w-full appearance-none px-3 pr-8 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                     >
-                      {semesters.map((s) => (
+                      {['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].map((s) => (
                         <option key={s} value={s}>
                           {s}
                         </option>
@@ -415,6 +489,20 @@ export default function Courses() {
                     <option value="02">Groupe 02</option>
                     <option value="03">Groupe 03</option>
                     <option value="04">Groupe 04</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                    Type de Cours
+                  </label>
+                  <select
+                    value={form.course_type}
+                    onChange={(e) => setForm({ ...form, course_type: e.target.value })}
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  >
+                    <option value="Cours">📖 Cours Magistral</option>
+                    <option value="TD">✏️ TD – Travaux Dirigés</option>
+                    <option value="TP">🔬 TP – Travaux Pratiques</option>
                   </select>
                 </div>
               </div>

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lock, User, ShieldCheck, Zap, ArrowRight, Eye, EyeOff, GraduationCap } from 'lucide-react';
 import { API_URL } from '../config';
+import { DOC_TITLE } from '../constants/documentTitles';
 
 interface LoginProps {
   onLogin: (status: boolean) => void;
@@ -14,6 +15,10 @@ export default function Login({ onLogin, forceRole }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    document.title = forceRole === 'teacher' ? DOC_TITLE.teacher : DOC_TITLE.admin;
+  }, [forceRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

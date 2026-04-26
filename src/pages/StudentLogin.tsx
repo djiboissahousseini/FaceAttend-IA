@@ -3,6 +3,7 @@ import { API_URL } from '../config';
 const API = API_URL;
 import { Mail, Zap, ArrowRight, GraduationCap, Fingerprint, Eye, EyeOff } from 'lucide-react';
 import { logger } from '../utils/logger';
+import { DOC_TITLE } from '../constants/documentTitles';
 
 interface StudentLoginProps {
   onLogin: (student: unknown) => void;
@@ -17,7 +18,7 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
   const [showCode, setShowCode] = useState(false);
 
   useEffect(() => {
-    document.title = 'FaceAttend | Login Étudiant';
+    document.title = DOC_TITLE.studentLogin;
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

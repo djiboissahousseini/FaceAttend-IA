@@ -6,7 +6,6 @@ import {
   X,
   BookOpen,
   History,
-  ShieldCheck,
   LogOut,
   User,
   Settings,
@@ -45,7 +44,7 @@ export default function StudentLayout({
           </div>
           <button
             onClick={() => setMenuOpen(true)}
-            className="p-2 rounded-xl bg-white/5 border border-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-emerald-500 transition-all shadow-[0_0_15px_rgba(0,0,0,0.5)]"
             aria-label="Ouvrir le menu"
           >
             <Menu size={22} />
@@ -55,7 +54,7 @@ export default function StudentLayout({
       </main>
 
       {/* ─── BOTTOM NAVIGATION (Mobile Tabs) ─── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0b1219]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-3 pb-8 z-40">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#020617] border-t border-slate-800 px-6 py-3 pb-8 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
         <div className="flex items-center justify-between max-w-md mx-auto">
           {navItems.map((item) => (
             <button
@@ -88,13 +87,15 @@ export default function StudentLayout({
           />
 
           {/* Drawer Content */}
-          <div className="absolute inset-y-0 left-0 w-4/5 max-w-xs bg-[#0b1219] border-r border-white/5 p-8 animate-in slide-in-from-left duration-300">
+          <div className="absolute inset-y-0 right-0 w-4/5 max-w-xs bg-[#020617] border-l border-slate-800 p-8 animate-in slide-in-from-right duration-300 shadow-2xl">
             <div className="flex items-center justify-between mb-12">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
                   <Cpu size={20} className="text-emerald-400" />
                 </div>
-                <span className="font-black text-sm tracking-widest uppercase">FaceAttend</span>
+                <span className="font-black text-sm tracking-widest uppercase text-white">
+                  FaceAttend
+                </span>
               </div>
               <button onClick={() => setMenuOpen(false)} className="text-slate-500">
                 <X size={24} />
@@ -106,13 +107,19 @@ export default function StudentLayout({
                 <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em] pl-1">
                   Configuration
                 </p>
-                <button className="w-full flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/5 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
+                <button
+                  onClick={() => {
+                    setActiveTab('timetable');
+                    setMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-4 p-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all"
+                >
+                  <BookOpen size={20} />
+                  <span className="text-sm font-bold">Emploi du Temps</span>
+                </button>
+                <button className="w-full flex items-center gap-4 p-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
                   <Settings size={20} />
                   <span className="text-sm font-bold">Paramètres</span>
-                </button>
-                <button className="w-full flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/5 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
-                  <ShieldCheck size={20} />
-                  <span className="text-sm font-bold">Sécurité</span>
                 </button>
               </div>
 

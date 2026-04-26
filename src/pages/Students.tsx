@@ -259,6 +259,9 @@ export default function Students() {
                     Code
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3 hidden lg:table-cell">
+                    Département
+                  </th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3 hidden lg:table-cell">
                     Groupe
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3 hidden lg:table-cell">
@@ -303,6 +306,11 @@ export default function Students() {
                     <td className="px-5 py-3 hidden md:table-cell">
                       <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
                         {student.student_code}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 hidden lg:table-cell">
+                      <span className="text-slate-600 text-sm">
+                        {departments.find((d) => d.id === student.department_id)?.name || '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden lg:table-cell">
@@ -454,11 +462,19 @@ export default function Students() {
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Groupe</label>
                 <input
                   type="text"
+                  list="available-groups"
                   value={form.group_name}
                   onChange={(e) => setForm({ ...form, group_name: e.target.value })}
-                  placeholder="ex: G1, G2, etc."
+                  placeholder="Sélectionner ou saisir (ex: G1)"
                   className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                 />
+                <datalist id="available-groups">
+                  {groups
+                    .filter((g) => g !== 'ALL')
+                    .map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                </datalist>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">
