@@ -9,6 +9,14 @@ Ce fichier recense les interventions effectuées par l'assistant IA sur les comp
 - **Sécurité :** Vérification de l'implémentation de l'Anti-Spoofing via le calcul de l'EAR (Eye Aspect Ratio).
 - **Automatisation :** Analyse du "IA Tracker" permettant le lancement automatique des sessions basé sur l'emploi du temps.
 
+### 2. Stabilisation & Durcissement (26 Avril 2026)
+- **Command Center :** Restauration des boutons tactiques (Anti-Spoofing, Suivi IA, Pause) et synchronisation avec le bus `localStorage`.
+- **Gestion des Salles :** Création d'une table `classrooms` dédiée et d'une interface de gestion premium pour structurer les lieux physiques.
+- **Lancement Anticipé :** Implémentation de la redirection dynamique de salle (permet de lancer un cours prévu en B1 dans la salle B2 en un clic).
+- **Interface Cours :** Ajout d'une vue "Tableau" organisée avec la colonne "Salle" et renommage des groupes "ALL" en "TOUS LES GROUPES".
+- **Magic QR :** Correction du flux de connexion automatique pour les terminaux mobiles via le portail étudiant.
+- **Intégrité DB :** Correction de la "Salle B5" erronée vers "Salle B2" et sécurisation des formulaires par menus déroulants dynamiques.
+
 ### 2. Modifications - ClassroomCamera.tsx
 - **Problème :** La détection automatique du visage ou du clignement pouvait parfois être capricieuse selon l'éclairage, laissant l'utilisateur bloqué sans retour visuel de "scan actif".
 - **Changement :** Ajout d'un mode de déclenchement manuel.

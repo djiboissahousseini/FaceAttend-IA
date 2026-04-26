@@ -518,14 +518,51 @@ export default function ClassroomCamera() {
           )}
 
           {status === 'standby' && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md text-[#00f0ff]/40">
-              <Fingerprint size={100} className="mb-6 animate-pulse opacity-40" />
-              <h2 className="text-3xl font-bold tracking-[0.2em] uppercase mb-3 text-[#00f0ff]/60">
-                ATTENTE SESSION
-              </h2>
-              <p className="tracking-[0.1em] text-sm text-slate-500">
-                SYSTÈME PRÊT - EN ATTENTE DE SIGNAL
-              </p>
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0f18]/90 backdrop-blur-xl overflow-hidden">
+              {/* Animated Background Grids */}
+              <div className="absolute inset-0 opacity-20" 
+                   style={{backgroundImage: 'linear-gradient(#00f0ff 1px, transparent 1px), linear-gradient(90deg, #00f0ff 1px, transparent 1px)', backgroundSize: '40px 40px'}}>
+              </div>
+              
+              {/* Radial Glow */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#00f0ff]/5 rounded-full blur-[120px]"></div>
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="relative mb-8">
+                  <div className="absolute inset-0 bg-[#00f0ff]/20 blur-2xl rounded-full animate-pulse"></div>
+                  <div className="relative p-8 border-2 border-[#00f0ff]/30 rounded-full bg-black/40 backdrop-blur-md">
+                    <Fingerprint size={80} className="text-[#00f0ff] animate-pulse" />
+                  </div>
+                </div>
+
+                <h2 className="text-4xl font-black tracking-[0.3em] uppercase mb-4 text-transparent bg-clip-text bg-gradient-to-r from-[#00f0ff] to-[#00ff9d] drop-shadow-[0_0_15px_rgba(0,240,255,0.5)]">
+                  TERMINAL SÉCURISÉ
+                </h2>
+                
+                <div className="flex items-center gap-4 px-6 py-2 bg-black/40 border border-[#00f0ff]/20 rounded-full backdrop-blur-md">
+                  <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-ping"></div>
+                  <p className="tracking-[0.2em] text-xs font-bold text-[#00f0ff]/80 uppercase">
+                    SYSTÈME PRÊT - EN ATTENTE DE SESSION
+                  </p>
+                </div>
+
+                <div className="mt-12 flex gap-8 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert size={12} className="text-[#00ff9d]/50" />
+                    SECURE-LINK: ACTIVE
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Activity size={12} className="text-[#00f0ff]/50" />
+                    AUTONOMOUS-MODE: ON
+                  </div>
+                </div>
+              </div>
+
+              {/* Decorative HUD corners */}
+              <div className="absolute top-8 left-8 w-16 h-16 border-t-2 border-l-2 border-[#00f0ff]/30"></div>
+              <div className="absolute top-8 right-8 w-16 h-16 border-t-2 border-r-2 border-[#00f0ff]/30"></div>
+              <div className="absolute bottom-8 left-8 w-16 h-16 border-b-2 border-l-2 border-[#00f0ff]/30"></div>
+              <div className="absolute bottom-8 right-8 w-16 h-16 border-b-2 border-r-2 border-[#00f0ff]/30"></div>
             </div>
           )}
 
@@ -759,19 +796,23 @@ export default function ClassroomCamera() {
 
         <div className="w-1/3 text-right">
           <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2 bg-black/40 border border-slate-800 px-2 py-1 rounded">
-              <Video size={10} className={themeClass.split(' ')[0]} />
-              <select
-                value={selectedDeviceId}
-                onChange={(e) => setSelectedDeviceId(e.target.value)}
-                className="bg-transparent text-slate-400 text-[9px] uppercase tracking-tighter outline-none cursor-pointer max-w-[120px]"
-              >
-                {videoDevices.map((device, i) => (
-                  <option key={device.deviceId} value={device.deviceId} className="bg-[#020617]">
-                    {device.label || `CAMÉRA ${i + 1}`}
-                  </option>
-                ))}
-              </select>
+            <div className="relative p-[1px] bg-gradient-to-r from-cyan-500/50 via-emerald-500/50 to-cyan-500/50 rounded-lg shadow-[0_0_15px_rgba(0,240,255,0.1)]">
+              <div className="relative flex items-center gap-2 bg-[#0a0f18] border border-white/5 px-3 py-1.5 rounded-[7px]">
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-4 border-l-2 border-emerald-500/50"></div>
+                <Video size={12} className="text-[#00ff9d]" />
+                <select
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  className="bg-transparent text-[#00f0ff] text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer max-w-[180px] appearance-none"
+                >
+                  {videoDevices.map((device, i) => (
+                    <option key={device.deviceId} value={device.deviceId} className="bg-[#0a0f18] text-white">
+                      {device.label || `HARDWARE_DEV_${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+                <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-pulse"></div>
+              </div>
             </div>
             <p className="text-slate-500 text-[10px] tracking-[0.1em] uppercase leading-tight">
               MOTEUR IA: V2.4 | LATENCE: 12MS

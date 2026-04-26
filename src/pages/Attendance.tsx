@@ -45,6 +45,7 @@ export default function Attendance() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [classrooms, setClassrooms] = useState<string[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionAttendanceResponse | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
@@ -71,8 +72,20 @@ export default function Attendance() {
   const [autoTracking, setAutoTracking] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchTeachers(), fetchSessions(), fetchCourses()]);
+    Promise.all([fetchTeachers(), fetchSessions(), fetchCourses(), fetchClassrooms()]);
   }, []);
+
+  async function fetchClassrooms() {
+    try {
+      const res = await fetch(`${API}/api/classrooms`);
+      if (res.ok) {
+        const data = await res.json();
+        setClassrooms(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   async function fetchCourses() {
     try {
@@ -200,7 +213,7 @@ export default function Attendance() {
     }
   }
 
-  async function createSession() {
+  async function createSession(launch = false) {
     if (!sessionForm.teacher_id || !sessionForm.course_name || !sessionForm.group_name) return;
     try {
       const res = await fetch(`${API}/api/sessions`, {
@@ -211,7 +224,14 @@ export default function Attendance() {
       if (!res.ok) return;
       const data = await readJsonSafe<{ id?: number }>(res);
       await fetchSessions();
-      if (typeof data?.id === 'number') loadSession(data.id);
+      
+      if (typeof data?.id === 'number') {
+        loadSession(data.id);
+        if (launch) {
+          sendCommand('FORCE_START_SESSION', { session_id: data.id });
+          alert(`Session lancée avec succès sur le terminal : ${sessionForm.classroom}`);
+        }
+      }
     } catch (e) {
       console.error('Erreur création session:', e);
     }
@@ -255,12 +275,16 @@ export default function Attendance() {
     await fetchSessions();
   }
 
+  const today = new Date().toISOString().split('T')[0];
   const anticipateSessions = sessions.filter(
-    (s) => s.status !== 'active' && s.status !== 'closed' && s.status !== 'cancelled'
+    (s) => 
+      s.status !== 'active' && 
+      s.status !== 'closed' && 
+      s.status !== 'cancelled' &&
+      s.session_date === today
   );
 
-  const extractedRooms = Array.from(new Set(courses.map(c => c.room).filter(Boolean)));
-  const rooms = extractedRooms.length > 0 ? extractedRooms : ['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'];
+  const rooms = classrooms.length > 0 ? classrooms : ['Salle B1', 'Salle B2', 'Amphi A', 'Labo IA'];
 
   return (
     <div className="space-y-6">
@@ -373,12 +397,21 @@ export default function Attendance() {
                 className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none col-span-1 md:col-span-2"
               />
             </div>
-            <button
-              onClick={createSession}
-              className="mt-4 w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-2xl transition-all"
-            >
-              Initialiser la session
-            </button>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => createSession(false)}
+                className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all"
+              >
+                Planifier
+              </button>
+              <button
+                onClick={() => createSession(true)}
+                className="flex-[2] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+              >
+                <MonitorPlay size={18} />
+                Lancer Directement
+              </button>
+            </div>
           </div>
 
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 shadow-sm">
@@ -387,7 +420,7 @@ export default function Attendance() {
               Lancement Anticipé
             </h2>
             <p className="text-xs text-blue-700 mb-4">
-              Forcez le démarrage d'un cours prévu aujourd'hui avant son heure.
+              Démarrer un cours prévu aujourd'hui (même s'il change de salle).
             </p>
             <div className="space-y-3">
               <select
@@ -398,21 +431,30 @@ export default function Attendance() {
                 <option value="">-- Choisir un cours --</option>
                 {anticipateSessions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.session_date?.substring(0, 10)} · {s.start_time?.substring(0, 5)} :{' '}
-                    {s.course_name} ({s.teacher_name})
+                    {s.start_time?.substring(0, 5)} : {s.course_name} (Initialement en {s.classroom})
                   </option>
                 ))}
               </select>
               <button
                 onClick={async () => {
                   if (selectedAnticipateSession) {
-                    // 1. Activer en base de données immédiatement
+                    const session = sessions.find(s => String(s.id) === selectedAnticipateSession);
+                    const needsRoomUpdate = session && session.classroom !== activeClassroom;
+
+                    // 1. Activer en base de données et mettre à jour la salle si nécessaire
                     try {
                       await fetch(`${API}/api/sessions/${selectedAnticipateSession}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'active' }), // status 'active' mettra is_active à true via notre backend
+                        body: JSON.stringify({ 
+                          status: 'active',
+                          classroom: activeClassroom // On force la salle actuelle !
+                        }),
                       });
+                      
+                      if (needsRoomUpdate) {
+                        alert(`Redirection : Le cours a été déplacé de ${session.classroom} vers ${activeClassroom}`);
+                      }
                     } catch (e) {
                       console.error('Erreur activation DB:', e);
                     }
