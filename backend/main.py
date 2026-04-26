@@ -1452,6 +1452,17 @@ def upsert_record(record: AttendanceUpsert, db: Session = Depends(get_db)):
 
 # ─── Recognize ───────────────────────────────────────────────────────────────
 
+def check_liveness(image_path: str) -> bool:
+    import cv2
+    img = cv2.imread(image_path)
+    if img is None:
+        return False
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Variance of the Laplacian: measures the focus/sharpness
+    # A blurry image (often a photo of a screen or paper) has low variance
+    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+    return variance > 15.0
+
 @app.post("/api/sessions/{session_id}/recognize")
 async def recognize_face(session_id: str, request: RecognizeRequest, db: Session = Depends(get_db)):
     try:
@@ -1461,6 +1472,12 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
         temp_path = os.path.join(UPLOAD_DIR, temp_filename)
         with open(temp_path, "wb") as f:
             f.write(data)
+
+        # Liveness Detection Check
+        if not check_liveness(temp_path):
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return {"match": False, "message": "Échec Liveness (Image floue/suspecte)", "status": "liveness_failed"}
 
         # apply_enhancement=True : active CLAHE pour compenser la basse lumière en salle
         target_encoding = compute_face_encoding(temp_path, apply_enhancement=True)

@@ -27,6 +27,7 @@ type ScanStatus =
   | 'duplicate'
   | 'wrong_group'
   | 'unknown'
+  | 'liveness_failed'
   | 'error';
 
 import { API_URL } from '../config';
@@ -67,7 +68,7 @@ export default function ClassroomCamera() {
       playSound('warning');
     } else if (newStatus === 'wrong_group') {
       playSound('error');
-    } else if (newStatus === 'unknown' || newStatus === 'error' || newStatus === 'teacher_error') {
+    } else if (newStatus === 'unknown' || newStatus === 'error' || newStatus === 'teacher_error' || newStatus === 'liveness_failed') {
       playSound('error');
     }
 
@@ -134,6 +135,11 @@ export default function ClassroomCamera() {
           handleResult('wrong_group', {
             name: data.student?.name,
             message: data.message || 'GROUPE INVALIDE',
+          });
+        } else if (data.status === 'liveness_failed') {
+          handleResult('liveness_failed', {
+            name: 'ALERTE SÉCURITÉ',
+            message: data.message || 'ÉCHEC LIVENESS',
           });
         } else {
           handleResult('unknown', { message: 'VISAGE INCONNU' });
@@ -515,13 +521,15 @@ export default function ClassroomCamera() {
                           : 'border-[#ff003c] text-[#ff003c]'
                     }`}
                   >
-                    <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-xl bg-current/10 border border-current">
+                    <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-xl bg-current/10 border border-current animate-pulse">
                       {status.includes('success') ? (
                         <UserCheck size={40} className="text-current" />
                       ) : status === 'duplicate' ? (
                         <ShieldAlert size={40} className="text-current" />
                       ) : status === 'wrong_group' ? (
                         <UserX size={40} className="text-current" />
+                      ) : status === 'liveness_failed' ? (
+                        <ShieldAlert size={40} className="text-current" />
                       ) : (
                         <AlertTriangle size={40} className="text-current" />
                       )}
