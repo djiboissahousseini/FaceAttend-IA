@@ -882,7 +882,9 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
                 "is_active": existing[5],
                 "start_time": str(existing[6]) if existing[6] else None,
                 "end_time": str(existing[7]) if existing[7] else None,
-                "is_paused": existing[8]
+                "is_paused": existing[8],
+                "status": "active", # Si elle est trouvée par get_active_session, elle est active
+                "teacher_name": match[3]
             }
             
         # 3. Créer la session si elle n'existe pas
@@ -894,8 +896,8 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
         t_id = t_res[0] if t_res else None
 
         insert_query = text("""
-            INSERT INTO sessions (teacher_id, course_name, group_name, classroom, session_date, is_active, start_time, end_time)
-            VALUES (:t_id, :name, :group, :room, :date, true, :start, :end)
+            INSERT INTO sessions (teacher_id, course_name, group_name, classroom, session_date, is_active, start_time, end_time, status)
+            VALUES (:t_id, :name, :group, :room, :date, true, :start, :end, 'active')
             RETURNING id
         """)
         new_id = db.execute(insert_query, {
@@ -917,7 +919,9 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
             "session_date": str(now.date()),
             "is_active": True,
             "start_time": st_time.strip(),
-            "end_time": et_time.strip()
+            "end_time": et_time.strip(),
+            "status": "active",
+            "teacher_name": match[3]
         }
     except Exception as e:
         db.rollback()
@@ -1112,19 +1116,21 @@ def get_sessions(db: Session = Depends(get_db)):
         query = """
         SELECT s.id, s.teacher_id, s.course_name, s.group_name, s.classroom, s.session_date::text,
                t.name as teacher_name, s.start_time::text, s.end_time::text,
-               c.id as course_id
+               c.id as course_id, s.is_active, s.status
         FROM sessions s
-        JOIN teachers t ON s.teacher_id = t.id
+        LEFT JOIN teachers t ON s.teacher_id = t.id
         LEFT JOIN courses c ON s.course_name = c.name AND s.group_name = c.group_name
-        ORDER BY s.session_date DESC
+        ORDER BY s.session_date DESC, s.start_time DESC
         """
         result = db.execute(text(query))
         return [
             {
                 "id": str(r[0]), "teacher_id": r[1], "course_name": r[2], 
                 "group_name": r[3], "classroom": r[4], "session_date": r[5],
-                "teacher_name": r[6], "start_time": r[7], "end_time": r[8],
-                "course_id": str(r[9]) if r[9] else None
+                "teacher_name": r[6] or "Inconnu", "start_time": r[7], "end_time": r[8],
+                "course_id": str(r[9]) if r[9] else None,
+                "is_active": r[10],
+                "status": r[11]
             } for r in result
         ]
     except Exception as e:
@@ -1212,22 +1218,51 @@ def get_session_attendance(session_id: str, db: Session = Depends(get_db)):
         if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
             
+        course_name = session_row[1]
         group_name = session_row[2]
         
-        # Get students for this group (including students without group if it's an 'ALL' or similar session)
-        if group_name in ('ALL', '', None):
+        # Normalize group name (Remove G/GRP and leading zeros)
+        def normalize_group(g):
+            if not g: return ""
+            # Remove G/GRP, uppercase, trim, and then strip leading zeros
+            g = g.upper().replace("GRP", "").replace("G", "").strip()
+            return g.lstrip('0') or "0" # "0" as fallback for pure zero groups
+
+        norm_group = normalize_group(group_name)
+        
+        # 1. Get course_id for enrollment check - Use ILIKE for fuzzy matching
+        course_id_query = text("SELECT id FROM courses WHERE :cname ILIKE '%' || name || '%' OR name ILIKE '%' || :cname || '%' LIMIT 1")
+        course_id_row = db.execute(course_id_query, {"cname": course_name}).fetchone()
+        cid = course_id_row[0] if course_id_row else None
+        
+        # 2. Robust combined query
+        if group_name == 'ALL':
             students_query = text("""
                 SELECT id, student_code, full_name, photo_url, matricule, group_name 
-                FROM students ORDER BY full_name
+                FROM students 
+                ORDER BY full_name
             """)
             students_result = db.execute(students_query).fetchall()
         else:
+            # SQL normalization: remove non-digits or just G/GRP and leading zeros
+            # To be simple and robust, we match students where their normalized group name matches
             students_query = text("""
-                SELECT id, student_code, full_name, photo_url, matricule, group_name 
-                FROM students WHERE group_name = :group_name OR group_name IS NULL
-                ORDER BY full_name
+                SELECT DISTINCT s.id, s.student_code, s.full_name, s.photo_url, s.matricule, s.group_name 
+                FROM students s
+                LEFT JOIN course_enrollments ce ON s.id = ce.student_id AND ce.course_id = :cid
+                WHERE ce.course_id IS NOT NULL 
+                   OR LTRIM(TRIM(UPPER(REPLACE(REPLACE(s.group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group
+                   OR (s.group_name IS NULL AND :norm_group = '')
+                ORDER BY s.full_name
             """)
-            students_result = db.execute(students_query, {"group_name": group_name}).fetchall()
+            students_result = db.execute(students_query, {
+                "cid": cid, 
+                "norm_group": norm_group
+            }).fetchall()
+        
+        # Fallback to ALL students if still empty (just to be safe)
+        if not students_result:
+            students_result = db.execute(text("SELECT id, student_code, full_name, photo_url, matricule, group_name FROM students ORDER BY full_name LIMIT 100")).fetchall()
         
         # Get attendance records for this session
         records_query = text("""
@@ -1271,6 +1306,65 @@ def get_session_attendance(session_id: str, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+@app.get("/api/courses/{course_id}/students")
+def get_course_students(course_id: str, db: Session = Depends(get_db)):
+    try:
+        # 1. Get course details
+        course_query = text("SELECT id, name, group_name FROM courses WHERE id = CAST(:cid AS uuid)")
+        course_row = db.execute(course_query, {"cid": course_id}).fetchone()
+        
+        if not course_row:
+            raise HTTPException(status_code=404, detail="Course not found")
+            
+        group_name = course_row[2]
+        
+        # Normalize group name (Remove G/GRP and leading zeros)
+        def normalize_group(g):
+            if not g: return ""
+            g = g.upper().replace("GRP", "").replace("G", "").strip()
+            return g.lstrip('0') or "0"
+
+        norm_group = normalize_group(group_name)
+        
+        # 2. Try Enrollment first
+        students_query = text("""
+            SELECT s.id, s.student_code, s.full_name, s.photo_url, s.matricule, s.group_name 
+            FROM students s
+            JOIN course_enrollments ce ON s.id = ce.student_id
+            WHERE ce.course_id = CAST(:cid AS uuid)
+            ORDER BY s.full_name
+        """)
+        students_result = db.execute(students_query, {"cid": course_id}).fetchall()
+        
+        # 3. Fallback to group if no enrollments
+        if not students_result:
+            if group_name == 'ALL':
+                students_query = text("SELECT id, student_code, full_name, photo_url, matricule, group_name FROM students ORDER BY full_name")
+                students_result = db.execute(students_query).fetchall()
+            else:
+                students_query = text("""
+                    SELECT id, student_code, full_name, photo_url, matricule, group_name 
+                    FROM students 
+                    WHERE LTRIM(TRIM(UPPER(REPLACE(REPLACE(group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group
+                    OR group_name IS NULL
+                    ORDER BY full_name
+                """)
+                students_result = db.execute(students_query, {"norm_group": norm_group}).fetchall()
+        
+        return [
+            {
+                "id": str(s[0]),
+                "student_code": s[1],
+                "full_name": s[2],
+                "photo_url": s[3],
+                "matricule": s[4],
+                "group_name": s[5]
+            } for s in students_result
+        ]
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
 @app.patch("/api/sessions/{session_id}")
 def update_session(session_id: int, session: SessionUpdate, db: Session = Depends(get_db)):
     try:
@@ -1279,16 +1373,29 @@ def update_session(session_id: int, session: SessionUpdate, db: Session = Depend
         query = text("""
             UPDATE sessions
             SET is_active = :is_active,
+                status = :status,
                 end_time = COALESCE(CAST(:end_time AS time), end_time)
             WHERE id = :session_id
         """)
         db.execute(query, {
             "is_active": is_active,
+            "status": session.status,
             "end_time": session.end_time,
             "session_id": session_id,
         })
         db.commit()
         return {"message": "Success"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    try:
+        query = text("DELETE FROM sessions WHERE id = :sid")
+        db.execute(query, {"sid": session_id})
+        db.commit()
+        return {"message": "Session supprimée avec succès"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e

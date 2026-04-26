@@ -29,7 +29,7 @@ export default function Login({ onLogin, forceRole }: LoginProps) {
       if (role === 'admin') {
         // Admin: Identifiants fixes
         if (username === 'usain' && password === 'usain2002') {
-          localStorage.setItem('faceattend_auth', 'true');
+          localStorage.setItem('faceattend_admin_token', 'true');
           localStorage.setItem('faceattend_role', 'admin');
           onLogin(true);
         } else {
@@ -46,7 +46,7 @@ export default function Login({ onLogin, forceRole }: LoginProps) {
 
         if (res.ok) {
           const data = await res.json();
-          localStorage.setItem('faceattend_auth', 'true');
+          localStorage.setItem('faceattend_teacher_token', 'true');
           localStorage.setItem('faceattend_role', 'teacher');
           localStorage.setItem('faceattend_user', JSON.stringify(data));
 

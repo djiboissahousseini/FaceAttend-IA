@@ -17,11 +17,11 @@ import AdminStudentSpace from './pages/AdminStudentSpace';
 import Classrooms from './pages/Classrooms';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('faceattend_auth') === 'true';
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('faceattend_admin_token') === 'true';
   });
-  const [userRole, setUserRole] = useState<'admin' | 'teacher' | null>(() => {
-    return (localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null) || null;
+  const [isTeacherAuthenticated, setIsTeacherAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('faceattend_teacher_token') === 'true';
   });
   const [currentPage, setCurrentPage] = useState<Page>(() => {
     const role = localStorage.getItem('faceattend_role');
@@ -36,14 +36,6 @@ function App() {
     }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    const auth = localStorage.getItem('faceattend_auth');
-    if (auth === 'true') {
-      setIsAuthenticated(true);
-      setUserRole(localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null);
-    }
-  }, []);
 
   // ─── PROTECTION ANTI-MOBILE (Réseau Local) ──────────────
   // Si l'utilisateur n'est pas sur le PC central (localhost) et tente d'accéder à l'admin ou au prof
@@ -60,11 +52,13 @@ function App() {
   const handleLogin = (authenticated: boolean) => {
     if (authenticated) {
       const savedRole = localStorage.getItem('faceattend_role') as 'admin' | 'teacher' | null;
-      setIsAuthenticated(true);
-      setUserRole(savedRole);
-      setCurrentPage(savedRole === 'teacher' ? 'teacher' : 'dashboard');
-    } else {
-      setIsAuthenticated(false);
+      if (savedRole === 'admin') {
+        setIsAdminAuthenticated(true);
+        setCurrentPage('dashboard');
+      } else if (savedRole === 'teacher') {
+        setIsTeacherAuthenticated(true);
+        setCurrentPage('teacher');
+      }
     }
   };
 
@@ -96,8 +90,8 @@ function App() {
   }
 
   // ─── PORTAIL ENSEIGNANT DÉDIÉ ─────────────────────────
-  if (window.location.pathname === '/teacher') {
-    if (!isAuthenticated || userRole !== 'teacher') {
+  if (window.location.pathname.startsWith('/teacher')) {
+    if (!isTeacherAuthenticated) {
       return <Login onLogin={handleLogin} forceRole="teacher" />;
     }
     return <TeacherDashboard mode="teacher" />;
@@ -111,16 +105,14 @@ function App() {
 
   // ─── PORTAIL ADMIN (/admin) ──────────────────────────
   if (window.location.pathname.startsWith('/admin')) {
-    if (!isAuthenticated || userRole !== 'admin') {
+    if (!isAdminAuthenticated) {
       return <Login onLogin={handleLogin} forceRole="admin" />;
     }
 
     const handleLogout = () => {
-      setIsAuthenticated(false);
-      setUserRole(null);
-      localStorage.removeItem('faceattend_auth');
+      setIsAdminAuthenticated(false);
+      localStorage.removeItem('faceattend_admin_token');
       localStorage.removeItem('faceattend_role');
-      localStorage.removeItem('faceattend_user');
       window.location.href = '/admin';
     };
 

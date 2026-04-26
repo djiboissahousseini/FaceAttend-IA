@@ -15,7 +15,10 @@ import {
   XCircle,
   ShieldAlert,
   Cpu,
-  PauseCircle
+  PauseCircle,
+  Trash2,
+  Play,
+  Users
 } from 'lucide-react';
 import { Session, Student, Teacher, Course } from '../types';
 
@@ -47,6 +50,7 @@ export default function Attendance() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [classrooms, setClassrooms] = useState<string[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionAttendanceResponse | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'master'>('live');
   const [selectedAnticipateSession, setSelectedAnticipateSession] = useState<string>('');
@@ -189,6 +193,7 @@ export default function Attendance() {
 
   async function loadSession(sessionId: number) {
     setSelectedSessionId(sessionId);
+    setSelectedCourse(null); // Clear selected course if loading a session
     try {
       const res = await fetch(`${API}/api/sessions/${sessionId}/attendance`);
       if (!res.ok) {
@@ -213,13 +218,77 @@ export default function Attendance() {
     }
   }
 
+  async function loadCourseStudents(course: Course) {
+    setSelectedCourse(course);
+    setSelectedSessionId(null); // Clear selected session
+    setSessionDetails(null); // Clear session details
+    try {
+      const res = await fetch(`${API}/api/courses/${course.id}/students`);
+      if (res.ok) {
+        const students = await res.json();
+        // Mimic a session structure to reuse the UI
+        setSessionDetails({
+          session: {
+            id: course.id,
+            course_name: course.name,
+            group_name: course.group_name || 'ALL',
+            session_date: 'THÉORIQUE',
+            teacher_name: course.teacher_name || 'N/A',
+            classroom: course.room || 'N/A',
+            start_time: course.schedule_day || 'N/A',
+            status: 'theoretical'
+          } as any,
+          students: students.map((s: any) => ({ ...s, status: null, marked_at: null }))
+        });
+      }
+    } catch (_e) {
+      console.error('Erreur loading course students');
+    }
+  }
+
+  async function deleteSession(id: number) {
+    if (!confirm('Voulez-vous vraiment supprimer cette session ?')) return;
+    try {
+      const res = await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchSessions();
+        if (selectedSessionId === id) {
+          setSelectedSessionId(null);
+          setSessionDetails(null);
+        }
+      }
+    } catch (_e) {
+      console.error('Erreur suppression session');
+    }
+  }
+
   async function createSession(launch = false) {
     if (!sessionForm.teacher_id || !sessionForm.course_name || !sessionForm.group_name) return;
+    
+    // Conflict detection
+    if (launch) {
+      const existingActive = sessions.find(s => s.classroom === sessionForm.classroom && s.status === 'active');
+      if (existingActive) {
+        if (!confirm(`Attention : Une session de "${existingActive.course_name}" est déjà en cours dans la ${sessionForm.classroom}. Voulez-vous l'arrêter pour lancer la nouvelle session ?`)) {
+          return;
+        }
+        // Stop the existing one first
+        await cancelActiveSession(existingActive.id);
+      }
+    }
+
     try {
+      const sessionData = { 
+        ...sessionForm, 
+        teacher_id: Number(sessionForm.teacher_id),
+        status: launch ? 'active' : 'scheduled',
+        is_active: launch
+      };
+      
       const res = await fetch(`${API}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...sessionForm, teacher_id: Number(sessionForm.teacher_id) }),
+        body: JSON.stringify(sessionData),
       });
       if (!res.ok) return;
       const data = await readJsonSafe<{ id?: number }>(res);
@@ -230,10 +299,46 @@ export default function Attendance() {
         if (launch) {
           sendCommand('FORCE_START_SESSION', { session_id: data.id });
           alert(`Session lancée avec succès sur le terminal : ${sessionForm.classroom}`);
+        } else {
+          alert(`Session planifiée avec succès pour le groupe ${sessionForm.group_name}`);
         }
       }
     } catch (e) {
       console.error('Erreur création session:', e);
+    }
+  }
+
+  async function launchExistingSession(id: number) {
+    const session = sessions.find(s => s.id === id);
+    if (!session) return;
+
+    // Conflict detection
+    const existingActive = sessions.find(s => s.classroom === session.classroom && s.status === 'active' && s.id !== id);
+    if (existingActive) {
+      if (!confirm(`Attention : Une session de "${existingActive.course_name}" est déjà en cours dans la ${session.classroom}. Voulez-vous l'arrêter pour lancer celle-ci ?`)) {
+        return;
+      }
+      await cancelActiveSession(existingActive.id);
+    }
+
+    try {
+      const res = await fetch(`${API}/api/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      });
+      if (res.ok) {
+        fetchSessions();
+        loadSession(id);
+        // Send command to camera
+        localStorage.setItem(`faceattend_cmd_${session.classroom}`, JSON.stringify({
+          command: 'FORCE_START_SESSION',
+          payload: { session_id: id },
+          timestamp: Date.now()
+        }));
+      }
+    } catch (_e) {
+      console.error('Erreur lancement session');
     }
   }
 
@@ -599,7 +704,7 @@ export default function Attendance() {
               }`}
             >
               <Video size={14} />
-              Sessions Live
+              Surveillance & Direct
             </button>
             <button
               onClick={() => setActiveTab('master')}
@@ -610,14 +715,24 @@ export default function Attendance() {
               }`}
             >
               <CalendarDays size={14} />
-              Agenda Master
+              Planning Global
             </button>
           </div>
 
           <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar">
             {activeTab === 'live' ? (
               sessions
-                .filter((s) => s.classroom === activeClassroom)
+                .filter((s) => 
+                  s.classroom === activeClassroom && 
+                  (s.status === 'active' || s.session_date === new Date().toISOString().split('T')[0])
+                )
+                .sort((a, b) => {
+                  // Active sessions first
+                  if (a.status === 'active' && b.status !== 'active') return -1;
+                  if (a.status !== 'active' && b.status === 'active') return 1;
+                  // Then by start time
+                  return (a.start_time || '').localeCompare(b.start_time || '');
+                })
                 .map((s) => (
                   <div
                     key={s.id}
@@ -639,25 +754,68 @@ export default function Attendance() {
                         >
                           {s.course_name}
                         </p>
-                        <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">
-                          {s.group_name === 'ALL' ? 'TOUS LES GROUPES' : `GRP ${s.group_name}`}
-                        </span>
+                        <div className="flex gap-1.5">
+                          {s.status === 'active' ? (
+                            <div className="flex items-center gap-1.5 bg-emerald-500 text-white px-2 py-0.5 rounded-full animate-pulse shadow-sm shadow-emerald-200">
+                              <Video size={8} />
+                              <span className="text-[9px] font-black uppercase">EN COURS</span>
+                            </div>
+                          ) : (s.status === 'scheduled' || (!s.status && s.is_active === false)) ? (
+                            <div className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">
+                              <CalendarClock size={8} />
+                              <span className="text-[9px] font-black uppercase">À VENIR</span>
+                            </div>
+                          ) : null}
+                          <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">
+                            {s.group_name === 'ALL' ? 'TOUS LES GROUPES' : `GRP ${s.group_name}`}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-slate-400 uppercase font-medium">
-                        {new Date(s.session_date).toLocaleDateString('fr-FR')} · {s.start_time}
-                      </p>
+                      <div className="mt-2 space-y-1">
+                        <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-1.5">
+                          <CalendarDays size={10} className="text-blue-500" />
+                          {new Date(s.session_date).toLocaleDateString('fr-FR')} · {s.start_time}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5">
+                          <Users size={10} className="text-purple-500" />
+                          Prof. {s.teacher_name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5">
+                          <MonitorPlay size={10} className="text-emerald-500" />
+                          {s.classroom}
+                        </p>
+                      </div>
                     </button>
 
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {s.status !== 'closed' ? (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      {s.status === 'scheduled' && (
+                        <>
+                          <button
+                            onClick={() => launchExistingSession(Number(s.id))}
+                            className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors shadow-sm"
+                            title="Lancer maintenant"
+                          >
+                            <Play size={14} />
+                          </button>
+                          <button
+                            onClick={() => deleteSession(Number(s.id))}
+                            className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors shadow-sm"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                      {s.status === 'active' && (
                         <button
                           onClick={() => cancelActiveSession(s.id)}
                           className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                          title="Annuler la session"
+                          title="Arrêter la session"
                         >
                           <XCircle size={14} />
                         </button>
-                      ) : (
+                      )}
+                      {s.status === 'closed' && (
                         <button
                           onClick={async () => {
                             await fetch(`${API}/api/sessions/${s.id}`, {
@@ -677,27 +835,68 @@ export default function Attendance() {
                   </div>
                 ))
             ) : (
-              courses
-                .filter((c) => c.room === activeClassroom)
-                .map((c) => (
-                  <div
+              (() => {
+                const days = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+                const todayName = days[new Date().getDay()];
+                const roomCourses = courses.filter((c) => c.room === activeClassroom);
+                const todayCourses = roomCourses.filter((c) => c.schedule_day?.toUpperCase() === todayName);
+                
+                // Show today's courses if available, otherwise show all room courses as fallback
+                const coursesToDisplay = todayCourses.length > 0 ? todayCourses : roomCourses;
+                
+                if (coursesToDisplay.length === 0) {
+                  return (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8 opacity-50">
+                      <Calendar size={32} className="mb-2" />
+                      <p className="text-xs">Aucun cours théorique répertorié pour cette salle.</p>
+                    </div>
+                  );
+                }
+
+                return coursesToDisplay.map((c) => (
+                  <button
                     key={c.id}
-                    className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-indigo-200 transition-all"
+                    onClick={() => loadCourseStudents(c)}
+                    className={`p-4 rounded-2xl border transition-all text-left w-full ${
+                      selectedCourse?.id === c.id
+                        ? 'border-indigo-500 bg-indigo-50 shadow-md'
+                        : 'border-slate-100 bg-white hover:border-indigo-200'
+                    }`}
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="font-bold text-slate-800 text-sm">{c.name}</p>
-                      <span className="text-[9px] border border-indigo-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold uppercase">
-                        Théorique
+                    <div className="flex justify-between items-start mb-3">
+                      <p className="font-bold text-slate-800 text-sm leading-tight">{c.name}</p>
+                      <span className="text-[9px] border border-indigo-200 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-widest bg-indigo-50/50">
+                        PROGRAMMÉ
                       </span>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-slate-500 font-bold uppercase">
-                        {c.schedule_day} · {c.schedule_time}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2">
+                        <CalendarDays size={10} className="text-indigo-500" />
+                        {c.schedule_day} · {c.schedule_time || `${c.start_time}-${c.end_time}`}
                       </p>
-                      <p className="text-[10px] text-slate-400">Prof: {c.teacher_name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold flex items-center gap-2">
+                        <Users size={10} className="text-purple-500" />
+                        Prof: {c.teacher_name}
+                      </p>
+                      <div className="flex justify-between items-end pt-1">
+                        <div className="flex gap-2">
+                          <span className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                            <MonitorPlay size={10} />
+                            {c.room}
+                          </span>
+                          <span className="text-[9px] bg-slate-800 text-white px-2 py-0.5 rounded-full font-black uppercase">
+                            {c.group_name === 'ALL' ? 'TOUS' : `GRP ${c.group_name}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-xl border border-indigo-100">
+                          <Cpu size={12} className="animate-pulse" />
+                          <span className="text-[9px] font-black uppercase tracking-widest">IA EN ATTENTE DE L'HEURE</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  </button>
+                ));
+              })()
             )}
             
             {activeTab === 'live' && sessions.filter(s => s.classroom === activeClassroom).length === 0 && (
@@ -726,78 +925,119 @@ export default function Attendance() {
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {sessionDetails.session.group_name === 'ALL' ? 'TOUS LES GROUPES' : `Groupe ${sessionDetails.session.group_name}`}
-                    </span>
-                    <span className="w-1 h-1 rounded-full bg-slate-300" />
-                    <span className="text-xs font-bold text-slate-400 italic">
-                      Listing Presence Direct
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="bg-emerald-50 px-3 py-2 rounded-2xl flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-[10px] font-black text-emerald-600 uppercase">
-                      Présents:{' '}
-                      {(sessionDetails.students || []).filter((s) => s.status === 'present').length}
+                      {sessionDetails.session.status === 'theoretical' ? (
+                        <>LISTE ABSOLUE DES INSCRITS • {sessionDetails.session.group_name}</>
+                      ) : (
+                        <>GROUPE {sessionDetails.session.group_name} • Listing Presence Direct</>
+                      )}
                     </span>
                   </div>
                 </div>
+                {sessionDetails.session.status !== 'theoretical' && (
+                  <div className="flex gap-2">
+                    <div className="bg-emerald-50 px-3 py-2 rounded-2xl flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase">
+                        Présents:{' '}
+                        {(sessionDetails.students || []).filter((s) => s.status === 'present').length}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                {(sessionDetails.students || []).map((student) => (
-                  <div
-                    key={student.id}
-                    className="p-4 rounded-3xl border border-slate-100 bg-white hover:border-blue-200 transition-all group/card relative overflow-hidden"
-                  >
-                    <div className="flex items-center gap-3 relative z-10">
-                      <img
-                        src={
-                          student.photo_url ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(student.full_name)}&background=f1f5f9&color=64748b`
-                        }
-                        alt={student.full_name}
-                        className="w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-sm"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-800 truncate leading-none mb-1">
-                          {student.full_name}
-                        </p>
-                        <p className="text-[10px] font-mono text-slate-400 uppercase">
-                          {student.student_code}
-                        </p>
+              <div className="space-y-8 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                {Object.entries(
+                  (sessionDetails.students || []).reduce(
+                    (acc, s) => {
+                      const grp = s.group_name || 'Sans Groupe';
+                      if (!acc[grp]) acc[grp] = [];
+                      acc[grp].push(s);
+                      return acc;
+                    },
+                    {} as Record<string, SessionAttendanceStudent[]>
+                  )
+                )
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([group, groupStudents]) => (
+                    <div key={group} className="space-y-4">
+                      <div className="flex items-center gap-4 px-2">
+                        <div className="h-px flex-1 bg-slate-100" />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                            {group === 'ALL' ? 'TOUS LES GROUPES' : `GROUPE ${group}`}
+                          </span>
+                          <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {groupStudents.filter((s) => s.status === 'present').length} / {groupStudents.length}
+                          </span>
+                        </div>
+                        <div className="h-px flex-1 bg-slate-100" />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupStudents.map((student) => (
+                          <div
+                            key={student.id}
+                            className={`p-4 rounded-3xl border transition-all group/card relative overflow-hidden ${
+                              student.status === 'present'
+                                ? 'bg-emerald-50/30 border-emerald-100'
+                                : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 relative z-10">
+                              <div className="relative">
+                                <img
+                                  src={
+                                    student.photo_url ||
+                                    `https://ui-avatars.com/api/?name=${encodeURIComponent(student.full_name)}&background=f1f5f9&color=64748b`
+                                  }
+                                  alt={student.full_name}
+                                  className={`w-12 h-12 rounded-2xl object-cover border-2 transition-all ${
+                                    student.status === 'present' ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-white'
+                                  }`}
+                                />
+                                {student.status === 'present' && (
+                                  <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white">
+                                    <CheckCircle2 size={10} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate leading-tight">
+                                  {student.full_name}
+                                </p>
+                                <p className="text-[10px] font-mono text-slate-400 uppercase mt-0.5">
+                                  {student.student_code}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 mt-4 relative z-10">
+                              <button
+                                onClick={() => markAttendance(student.id, 'present')}
+                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${
+                                  student.status === 'present'
+                                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                    : 'bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'
+                                }`}
+                              >
+                                Présent
+                              </button>
+                              <button
+                                onClick={() => markAttendance(student.id, 'absent')}
+                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${
+                                  student.status === 'absent'
+                                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
+                                    : 'bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600'
+                                }`}
+                              >
+                                Absent
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="flex gap-2 mt-4 relative z-10">
-                      <button
-                        onClick={() => markAttendance(student.id, 'present')}
-                        className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${
-                          student.status === 'present'
-                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                            : 'bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'
-                        }`}
-                      >
-                        Présent
-                      </button>
-                      <button
-                        onClick={() => markAttendance(student.id, 'absent')}
-                        className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${
-                          student.status === 'absent'
-                            ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
-                            : 'bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600'
-                        }`}
-                      >
-                        Absent
-                      </button>
-                    </div>
-                    {student.status === 'present' && (
-                      <div className="absolute -top-6 -right-6 w-12 h-12 bg-emerald-500/10 rounded-full flex items-end justify-start p-2">
-                        <CheckCircle2 size={12} className="text-emerald-500" />
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
               </div>
             </>
           )}
