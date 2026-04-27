@@ -30,3 +30,20 @@
     - Implémentation d'un moteur de risque global (Matrix Sync) qui change la couleur de l'interface selon l'état de l'étudiant.
     - Ajout d'une bannière d'alerte critique sur l'écran d'accueil en cas de seuil atteint.
     - Harmonisation visuelle des badges (CRITICAL/WARNING/SAFE) pour une cohérence totale avec les vues Professeur et Admin.
+
+## [27/04/2026] - Rebrandisation Universitaire et Optimisation des Rapports
+
+### Modifications effectuées
+- **Identité Visuelle (Branding)** : Intégration complète du nom et du logo de l'**Université Belhadj Bouchaïb (Aïn Témouchent)** sur tous les tableaux de bord (Admin et Enseignant).
+- **Rapports d'Assiduité (Reports)** :
+    - Ajout d'une section **"Liste Rouge"** dynamique affichant les étudiants en situation critique directement dans l'interface.
+    - Synchronisation de la liste des groupes : tous les groupes d'étudiants (01, 02, 03, 04, etc.) sont désormais visibles dans les filtres, même sans enregistrements préalables.
+    - Correction du compteur global d'enregistrements pour refléter l'activité réelle du système.
+- **Gestion des Alertes (Alerts)** :
+    - Implémentation d'une **Modal d'Inspection de Cours** permettant de voir la liste complète des étudiants inscrits à un cours et leur état d'absence en temps réel.
+- **Backend (API & Logic)** :
+    - **Matching Intelligent** : Optimisation des jointures SQL pour faire correspondre les sessions et les cours même en cas de différences de casse ou de préfixes (ex: "se" match avec "Cours SE").
+    - **Réveil Automatique de la Caméra** : Ajout d'une détection des sessions `scheduled` dans `get_current_session`, permettant à la caméra de salle de démarrer automatiquement selon l'emploi du temps.
+- **DevOps & Mobilité** :
+    - **Unification du Script Mobile** : Mise à jour de `connect_phones.sh` pour gérer à la fois le reverse proxy web/API et le tunnel DroidCam (port 4747) en un seul passage.
+    - Nettoyage des scripts de démarrage et organisation des outils de diagnostic.
