@@ -25,3 +25,8 @@
     - Affichage du ratio d'absences par rapport au seuil pour chaque alerte.
 - **Frontend (Admin Dashboard)** : Intégration d'une vue globale des alertes.
     - Ajout d'une carte statistique "Alertes IA" sur le tableau de bord principal de l'Administrateur pour un suivi macroscopique des risques d'exclusion.
+- **Frontend (Student Dashboard)** : Automatisation et Synchronisation Totale.
+    - Accélération de la synchronisation (polling réduit à 15s).
+    - Implémentation d'un moteur de risque global (Matrix Sync) qui change la couleur de l'interface selon l'état de l'étudiant.
+    - Ajout d'une bannière d'alerte critique sur l'écran d'accueil en cas de seuil atteint.
+    - Harmonisation visuelle des badges (CRITICAL/WARNING/SAFE) pour une cohérence totale avec les vues Professeur et Admin.

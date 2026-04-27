@@ -1,5 +1,5 @@
 import { getPhotoUrl } from '../utils/image';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { API_URL } from '../config';
 const API = API_URL;
 import {
@@ -17,6 +17,7 @@ import {
   Clock,
   MapPin,
   RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
 import { DOC_TITLE } from '../constants/documentTitles';
@@ -64,6 +65,16 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // ─── AUTOMATIC RISK ENGINE (SUPER-SYNC) ───────────────────────────────────
+  const globalRisk = useMemo(() => {
+    if (!stats?.modules) return 'SAFE';
+    const hasCritical = stats.modules.some(m => m.absences >= (m.threshold || 5));
+    if (hasCritical) return 'CRITICAL';
+    const hasWarning = stats.modules.some(m => m.absences >= (m.threshold || 5) - 1);
+    if (hasWarning) return 'WARNING';
+    return 'SAFE';
+  }, [stats?.modules]);
+
   useEffect(() => {
     document.title = DOC_TITLE.studentApp;
 
@@ -81,7 +92,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
 
         const interval = setInterval(() => {
           fetchStats(parsed.id);
-        }, 30000);
+        }, 15000); // 15s refresh for real-time feel
 
         return () => clearInterval(interval);
       } catch (e) {
