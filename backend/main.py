@@ -1013,7 +1013,7 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
             "name": display_name, 
             "presences": 0, 
             "absences": 0, 
-            "threshold": c_map["absence_threshold"] or 3,
+            "threshold": c_map["absence_threshold"] or 5,
             "schedule_day": c_map["schedule_day"] or "",
             "schedule_time": c_map["schedule_time"] or "",
             "room": c_map["room"] or "",
@@ -1060,7 +1060,7 @@ def get_student_full_stats(student_id: str, db: Session = Depends(get_db)):
                 "name": display_name, 
                 "presences": 0, 
                 "absences": 0, 
-                "threshold": threshold or 3,
+                "threshold": threshold or 5,
                 "schedule_day": "",
                 "schedule_time": "",
                 "room": "",
@@ -1119,7 +1119,12 @@ def get_sessions(db: Session = Depends(get_db)):
                c.id as course_id, s.is_active, s.status
         FROM sessions s
         LEFT JOIN teachers t ON s.teacher_id = t.id
-        LEFT JOIN courses c ON s.course_name = c.name AND s.group_name = c.group_name
+        LEFT JOIN courses c ON (
+            LOWER(s.course_name) = LOWER(c.name) OR 
+            LOWER('Cours ' || s.course_name) = LOWER(c.name) OR
+            LOWER(s.course_name) = LOWER('Cours ' || c.name) OR
+            LOWER(s.course_name) = LOWER(c.course_code)
+        ) AND s.group_name = c.group_name
         ORDER BY s.session_date DESC, s.start_time DESC
         """
         result = db.execute(text(query))
@@ -1337,9 +1342,26 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
         students_result = db.execute(students_query, {"cid": course_id}).fetchall()
         
         # 3. Fallback to group if no enrollments
+        if not students_result:
+            if norm_group == 'ALL' or norm_group == '':
+                fallback_query = text("SELECT id, student_code, full_name, photo_url, matricule, group_name FROM students")
+                students_result = db.execute(fallback_query).fetchall()
+            else:
+                fallback_query = text("""
+                    SELECT id, student_code, full_name, photo_url, matricule, group_name 
+                    FROM students 
+                    WHERE LTRIM(TRIM(UPPER(REPLACE(REPLACE(group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group
+                """)
+                students_result = db.execute(fallback_query, {"norm_group": norm_group}).fetchall()
+
         # 4. Final Query with Stats
-        # We calculate absence_count and check for active alerts
-        final_query = text("""
+        student_ids = [r[0] for r in students_result]
+        if not student_ids:
+            return []
+            
+        sids_str = ",".join([f"'{str(sid)}'" for sid in student_ids])
+        
+        final_query = text(f"""
             SELECT 
                 s.id, s.student_code, s.full_name, s.photo_url, s.matricule, s.group_name,
                 COUNT(ar.id) FILTER (WHERE ar.status = 'Absent') as absence_count,
@@ -1350,19 +1372,14 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
             LEFT JOIN attendance_records ar ON s.id = ar.student_id 
                 AND ar.session_id IN (SELECT id FROM sessions WHERE course_name = :cname)
             LEFT JOIN absence_alerts aa ON s.id = aa.student_id AND aa.course_id = :cid
-            WHERE s.id IN :sids
+            WHERE s.id IN ({sids_str})
             GROUP BY s.id
             ORDER BY absence_count DESC, s.full_name
         """)
-        
-        student_ids = [r[0] for r in students_result]
-        if not student_ids:
-            return []
             
         stats_result = db.execute(final_query, {
             "cname": course_row[1],
-            "cid": course_id,
-            "sids": tuple(student_ids)
+            "cid": course_id
         }).fetchall()
 
         return [
@@ -1375,9 +1392,9 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
                 "group_name": r[5],
                 "absence_count": r[6] or 0,
                 "presence_count": r[7] or 0,
-                "absence_threshold": r[8] or 3,
+                "absence_threshold": r[8] or 5,
                 "alert_status": r[9] or "Normal",
-                "risk_level": "CRITICAL" if (r[6] or 0) >= (r[8] or 3) else "WARNING" if (r[6] or 0) >= (r[8] or 3) - 1 else "SAFE"
+                "risk_level": "CRITICAL" if (r[6] or 0) >= (r[8] or 5) else "WARNING" if (r[6] or 0) >= (r[8] or 5) - 1 else "SAFE"
             } for r in stats_result
         ]
     except Exception as e:
@@ -1449,7 +1466,12 @@ def get_all_records(db: Session = Depends(get_db)):
     FROM attendance_records ar
     JOIN students s ON ar.student_id = s.id
     JOIN sessions sess ON ar.session_id = sess.id
-    LEFT JOIN courses c ON sess.course_name = c.name AND sess.group_name = c.group_name
+    LEFT JOIN courses c ON (
+        LOWER(sess.course_name) = LOWER(c.name) OR 
+        LOWER('Cours ' || sess.course_name) = LOWER(c.name) OR
+        LOWER(sess.course_name) = LOWER('Cours ' || c.name) OR
+        LOWER(sess.course_name) = LOWER(c.course_code)
+    ) AND sess.group_name = c.group_name
     """
         result = db.execute(text(query))
         return [
@@ -1526,7 +1548,7 @@ def sync_student_alerts(student_id: str, session_id: int, db: Session):
         if not c_row: return
         
         course_id, threshold = c_row
-        threshold = threshold or 3
+        threshold = threshold or 5
         
         # 2. Count total absences for this student in this course
         abs_query = text("""

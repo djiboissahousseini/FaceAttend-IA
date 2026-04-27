@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { API_URL } from '../config';
 const API = API_URL;
-import { TrendingUp, TrendingDown, Download } from 'lucide-react';
-import { Course } from '../types';
+import { TrendingUp, TrendingDown, Download, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Course, AbsenceAlert } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -32,25 +32,31 @@ interface StudentStats {
 export default function Reports() {
   const [courseStats, setCourseStats] = useState<CourseStats[]>([]);
   const [studentStats, setStudentStats] = useState<StudentStats[]>([]);
+  const [alerts, setAlerts] = useState<AbsenceAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterGroup, setFilterGroup] = useState('ALL');
   const [view, setView] = useState<'courses' | 'students'>('courses');
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => fetchData(true), 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  async function fetchData() {
-    setLoading(true);
+  async function fetchData(silent = false) {
+    if (!silent) setLoading(true);
     try {
-      const [coursesRes, sessionsRes, recordsRes, enrollRes] = await Promise.all([
+      const [coursesRes, sessionsRes, recordsRes, enrollRes, alertsRes, allStudentsRes] = await Promise.all([
         fetch(`${API}/api/courses`).then((r) => r.json()),
         fetch(`${API}/api/sessions`).then((r) => r.json()),
         fetch(`${API}/api/records`).then((r) => r.json()),
         fetch(`${API}/api/enrollments`).then((r) => r.json()),
+        fetch(`${API}/api/alerts`).then((r) => r.json()),
+        fetch(`${API}/api/students`).then((r) => r.json()),
       ]);
 
       const courseList = (coursesRes ?? []) as Course[];
+      const studentsList = (allStudentsRes ?? []) as any[];
 
       const sessions = sessionsRes ?? [];
       const records = recordsRes ?? [];
@@ -94,32 +100,30 @@ export default function Reports() {
       setCourseStats(stats);
 
       const studentMap: Record<string, StudentStats> = {};
+      
+      // Initialize with ALL students to ensure all groups are present in filters
+      studentsList.forEach((s) => {
+        studentMap[s.id] = {
+          student_id: s.id,
+          full_name: s.full_name || s.name || '',
+          photo_url: s.photo_url || '',
+          student_code: s.student_code || s.matricule || '',
+          present: 0,
+          absent: 0,
+          late: 0,
+          total: 0,
+          rate: 0,
+          group_name: s.group_name || '',
+        };
+      });
+
       records.forEach(
         (r: {
           student_id: string;
           status: string;
-          students?: {
-            full_name?: string;
-            photo_url?: string;
-            student_code?: string;
-            group_name?: string;
-          };
         }) => {
-          if (!r.student_id) return;
-          if (!studentMap[r.student_id]) {
-            studentMap[r.student_id] = {
-              student_id: r.student_id,
-              full_name: r.students?.full_name ?? '',
-              photo_url: r.students?.photo_url ?? '',
-              student_code: r.students?.student_code ?? '',
-              present: 0,
-              absent: 0,
-              late: 0,
-              total: 0,
-              rate: 0,
-              group_name: r.students?.group_name ?? '',
-            };
-          }
+          if (!r.student_id || !studentMap[r.student_id]) return;
+          
           studentMap[r.student_id].total++;
           if (r.status === 'present') studentMap[r.student_id].present++;
           else if (r.status === 'absent') studentMap[r.student_id].absent++;
@@ -133,10 +137,11 @@ export default function Reports() {
         }))
         .sort((a, b) => a.rate - b.rate);
       setStudentStats(sList);
+      setAlerts(alertsRes ?? []);
     } catch (_e) {
       console.error('Erreur fetchData');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -289,7 +294,48 @@ export default function Reports() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Liste Rouge Section */}
+      {alerts.filter(a => a.status === 'active').length > 0 && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl overflow-hidden shadow-sm">
+          <div className="px-5 py-3 bg-red-600 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white">
+              <ShieldAlert size={18} />
+              <h2 className="text-sm font-black uppercase tracking-widest">Liste Rouge : Étudiants à Risque d'Exclusion</h2>
+            </div>
+            <span className="bg-white text-red-600 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+              {alerts.filter(a => a.status === 'active').length} Alertes Critiques
+            </span>
+          </div>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {alerts.filter(a => a.status === 'active').slice(0, 6).map(alert => (
+              <div key={alert.id} className="bg-white p-3 rounded-xl border border-red-100 flex items-center gap-3 hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-100 shrink-0">
+                  <img 
+                    src={alert.students?.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(alert.students?.full_name || '')}&background=ef4444&color=fff`} 
+                    alt="" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black text-slate-900 truncate">{alert.students?.full_name}</p>
+                  <p className="text-[10px] text-red-500 font-bold">{alert.courses?.name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-red-600">{alert.absence_count}/{alert.threshold}</p>
+                  <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
+                </div>
+              </div>
+            ))}
+            {alerts.filter(a => a.status === 'active').length > 6 && (
+              <div className="flex items-center justify-center p-3 text-red-400 text-[10px] font-bold uppercase tracking-widest">
+                + {alerts.filter(a => a.status === 'active').length - 6} autres signalements...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center">
           <p className="text-slate-500 text-xs mb-2">Taux Moyen de Présence</p>
@@ -315,7 +361,7 @@ export default function Reports() {
         <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center">
           <p className="text-slate-500 text-xs mb-2">Total Enregistrements</p>
           <p className="text-4xl font-bold text-slate-800">
-            {courseStats.reduce((s, c) => s + c.presentCount + c.absentCount + c.lateCount, 0)}
+            {studentStats.reduce((s, st) => s + st.total, 0)}
           </p>
           <p className="text-slate-400 text-xs mt-2">Présences & absences</p>
         </div>

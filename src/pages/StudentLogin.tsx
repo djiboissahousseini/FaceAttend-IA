@@ -230,6 +230,12 @@ export default function StudentLogin({ onLogin }: StudentLoginProps) {
             <p className="text-slate-500 text-xs font-medium">
               Système sécurisé par reconnaissance faciale
             </p>
+            <div className="mt-4 px-4 py-2 bg-white/5 rounded-lg inline-flex items-center gap-2 border border-white/5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                Connecté via : {window.location.hostname}
+              </span>
+            </div>
           </div>
         </div>
       </div>

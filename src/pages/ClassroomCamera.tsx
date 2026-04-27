@@ -235,9 +235,11 @@ export default function ClassroomCamera() {
             }
             case 'TOGGLE_LIVENESS':
               setLivenessEnabled(data.payload.enabled);
+              speak(`Anti-Spoofing ${data.payload.enabled ? 'activé' : 'désactivé'}`);
               break;
             case 'TOGGLE_AUTO_TRACKING':
               setAutoTracking(data.payload.enabled);
+              speak(`Suivi I A ${data.payload.enabled ? 'activé' : 'désactivé'}`);
               break;
           }
         } catch (err) {

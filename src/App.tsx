@@ -38,11 +38,14 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ─── PROTECTION ANTI-MOBILE (Réseau Local) ──────────────
-  // Si l'utilisateur n'est pas sur le PC central (localhost) et tente d'accéder à l'admin ou au prof
+  // Si l'utilisateur n'est pas sur le PC central (localhost/127.0.0.1) 
+  // et tente d'accéder à l'admin, au prof ou à la caméra
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (
-    window.location.hostname !== 'localhost' &&
+    !isLocal &&
     (window.location.pathname.startsWith('/admin') ||
       window.location.pathname.startsWith('/teacher') ||
+      window.location.pathname.startsWith('/camera') ||
       window.location.pathname === '/')
   ) {
     window.location.href = '/portal';

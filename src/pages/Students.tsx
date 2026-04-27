@@ -43,17 +43,24 @@ export default function Students() {
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => fetchData(true), 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  async function fetchData() {
-    setLoading(true);
-    const [studentsRes, deptsRes] = await Promise.all([
-      fetch(`${API}/api/students`).then((r) => r.json()),
-      fetch(`${API}/api/departments`).then((r) => r.json()),
-    ]);
-    setStudents(studentsRes ?? []);
-    setDepartments(deptsRes ?? []);
-    setLoading(false);
+  async function fetchData(silent = false) {
+    if (!silent) setLoading(true);
+    try {
+      const [studentsRes, deptsRes] = await Promise.all([
+        fetch(`${API}/api/students`).then((r) => r.json()),
+        fetch(`${API}/api/departments`).then((r) => r.json()),
+      ]);
+      setStudents(studentsRes ?? []);
+      setDepartments(deptsRes ?? []);
+    } catch (e) {
+      // silent fail
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }
 
   const filtered = students.filter((s) => {

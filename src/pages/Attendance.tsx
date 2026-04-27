@@ -77,7 +77,31 @@ export default function Attendance() {
 
   useEffect(() => {
     Promise.all([fetchTeachers(), fetchSessions(), fetchCourses(), fetchClassrooms()]);
+    const interval = setInterval(() => {
+      fetchSessions();
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      const interval = setInterval(() => {
+        const pollSession = async () => {
+          try {
+            const res = await fetch(`${API}/api/sessions/${selectedSessionId}/attendance`);
+            if (res.ok) {
+              const data = await res.json();
+              setSessionDetails(data);
+            }
+          } catch (e) {
+            // silent fail on poll
+          }
+        };
+        pollSession();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedSessionId]);
 
   async function fetchClassrooms() {
     try {
@@ -499,22 +523,39 @@ export default function Attendance() {
                 type="date"
                 value={sessionForm.session_date}
                 onChange={(e) => setSessionForm({ ...sessionForm, session_date: e.target.value })}
-                className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none col-span-1 md:col-span-2"
+                className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none"
               />
+              <div className="flex gap-2">
+                <input
+                  type="time"
+                  value={sessionForm.start_time}
+                  onChange={(e) => setSessionForm({ ...sessionForm, start_time: e.target.value })}
+                  className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm"
+                  title="Heure de début"
+                />
+                <input
+                  type="time"
+                  value={sessionForm.end_time}
+                  onChange={(e) => setSessionForm({ ...sessionForm, end_time: e.target.value })}
+                  className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm"
+                  title="Heure de fin"
+                />
+              </div>
             </div>
-            <div className="flex gap-3 mt-4">
+            <div className="flex flex-col sm:flex-row gap-3 mt-4">
               <button
                 onClick={() => createSession(false)}
-                className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all"
+                className="flex-1 py-3 bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded-2xl hover:bg-amber-100 transition-all flex items-center justify-center gap-2"
               >
-                Planifier
+                <CalendarClock size={18} />
+                Planifier (Agenda)
               </button>
               <button
                 onClick={() => createSession(true)}
-                className="flex-[2] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                className="flex-[1.5] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
               >
                 <MonitorPlay size={18} />
-                Lancer Directement
+                Lancer Directement (Caméra)
               </button>
             </div>
           </div>
@@ -600,21 +641,65 @@ export default function Attendance() {
             </div>
 
             {activeSession ? (
-              <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 mb-6">
-                <p className="text-blue-400 text-xs font-bold uppercase mb-1">
-                  Cours en cours de détection
-                </p>
-                <p className="text-xl font-bold text-white mb-1">{activeSession.course_name}</p>
-                <p className="text-slate-400 text-sm mb-4">
-                  Professeur: {activeSession.teacher_name}
-                </p>
-                <button
-                  onClick={() => cancelActiveSession(activeSession.id)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-                >
-                  <XCircle size={14} />
-                  Annuler ce cours
-                </button>
+              <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 mb-6 relative overflow-hidden group/card shadow-2xl">
+                {/* Background Decoration */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-3xl" />
+                
+                <div className="flex justify-between items-center mb-4 relative z-10">
+                  <p className="text-blue-400 text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    Détection Active
+                  </p>
+                  {selectedSessionId === activeSession.id && sessionDetails && (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                      <span className="text-[10px] font-black text-emerald-500">
+                        {sessionDetails.students.filter(s => s.status === 'present' || s.status === 'late').length} / {sessionDetails.students.length} PRÉSENTS
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex justify-between items-start mb-5 relative z-10">
+                  <div className="flex-1">
+                    <h4 className="text-xl font-black text-white leading-tight mb-1">{activeSession.course_name}</h4>
+                    <p className="text-slate-400 text-xs font-bold">Professeur: {activeSession.teacher_name}</p>
+                  </div>
+                  <div className="bg-slate-900/60 px-3 py-2 rounded-xl border border-slate-700/50 text-center min-w-[70px]">
+                    <p className="text-[7px] text-slate-500 font-black uppercase tracking-widest mb-0.5">Groupe</p>
+                    <p className="text-sm font-black text-blue-400">{activeSession.group_name === 'ALL' ? 'TOUS' : activeSession.group_name}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-6 relative z-10">
+                  <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/30">
+                    <p className="text-[7px] text-slate-500 font-black uppercase tracking-widest mb-1">Planning Horaire</p>
+                    <p className="text-xs font-bold text-slate-200">{activeSession.start_time?.substring(0, 5)} - {activeSession.end_time?.substring(0, 5)}</p>
+                  </div>
+                  <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/30">
+                    <p className="text-[7px] text-slate-500 font-black uppercase tracking-widest mb-1">Date Séance</p>
+                    <p className="text-xs font-bold text-slate-200">{new Date(activeSession.session_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 relative z-10">
+                  <button
+                    onClick={() => cancelActiveSession(activeSession.id)}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-[9px] font-black uppercase tracking-[0.1em] transition-all"
+                  >
+                    <XCircle size={14} />
+                    Arrêter le cours
+                  </button>
+                  <button
+                    onClick={() => loadSession(activeSession.id)}
+                    className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20"
+                    title="Voir les détails"
+                  >
+                    <Users size={16} />
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 text-center mb-6">
@@ -724,15 +809,18 @@ export default function Attendance() {
             {activeTab === 'live' && (
               <div className="mb-6">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 px-1">
-                  Flux Caméra Actif
+                  Flux Caméra Actif (Cliquez pour voir les étudiants)
                 </h3>
                 {sessions.find(s => s.status === 'active' && s.classroom === activeClassroom) ? (
                   sessions
                     .filter(s => s.status === 'active' && s.classroom === activeClassroom)
                     .map(s => (
-                      <div 
+                      <button 
                         key={s.id}
-                        className="bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden group transition-all"
+                        onClick={() => loadSession(Number(s.id))}
+                        className={`w-full text-left bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden group transition-all ${
+                          selectedSessionId === Number(s.id) ? 'ring-4 ring-emerald-300 ring-offset-2' : 'hover:scale-[1.02]'
+                        }`}
                       >
                         <div className="relative z-10">
                           <div className="flex justify-between items-start mb-4">
@@ -740,13 +828,16 @@ export default function Attendance() {
                               <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
                               <span className="text-[10px] font-black uppercase">EN COURS D'ENREGISTREMENT</span>
                             </div>
-                            <button 
-                              onClick={() => cancelActiveSession(s.id)}
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cancelActiveSession(s.id);
+                              }}
                               className="w-10 h-10 rounded-full bg-white/10 hover:bg-red-500 flex items-center justify-center transition-all group/btn"
                               title="Arrêter la session"
                             >
                               <PowerOff size={18} className="group-hover/btn:scale-110 transition-transform" />
-                            </button>
+                            </div>
                           </div>
                           
                           <h4 className="text-xl font-black mb-1">{s.course_name}</h4>
@@ -766,7 +857,7 @@ export default function Attendance() {
                           </div>
                         </div>
                         <Video size={140} className="absolute -bottom-10 -right-10 text-white/5 -rotate-12 group-hover:rotate-0 transition-all duration-700" />
-                      </div>
+                      </button>
                     ))
                 ) : (
                   <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center">
@@ -782,7 +873,7 @@ export default function Attendance() {
             {/* UPCOMING / OTHER SESSIONS */}
             {activeTab === 'live' && (
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 px-1">
-                Agenda de la Journée
+                Séances en Attente & Terminées
               </h3>
             )}
 
@@ -794,7 +885,7 @@ export default function Attendance() {
                   (s.session_date === new Date().toISOString().split('T')[0])
                 )
                 .sort((a, b) => {
-                  // Active sessions first
+                  // Active sessions first (fallback just in case)
                   if (a.status === 'active' && b.status !== 'active') return -1;
                   if (a.status !== 'active' && b.status === 'active') return 1;
                   // Then by start time
@@ -822,15 +913,15 @@ export default function Attendance() {
                           {s.course_name}
                         </p>
                         <div className="flex gap-1.5">
-                          {s.status === 'active' ? (
-                            <div className="flex items-center gap-1.5 bg-emerald-500 text-white px-2 py-0.5 rounded-full animate-pulse shadow-sm shadow-emerald-200">
-                              <Video size={8} />
-                              <span className="text-[9px] font-black uppercase">EN COURS</span>
+                          {s.status === 'closed' ? (
+                            <div className="flex items-center gap-1.5 bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full border border-slate-300">
+                              <CheckCircle2 size={8} />
+                              <span className="text-[9px] font-black uppercase">TERMINÉ</span>
                             </div>
                           ) : (s.status === 'scheduled' || (!s.status && s.is_active === false)) ? (
-                            <div className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">
+                            <div className="flex items-center gap-1.5 bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">
                               <CalendarClock size={8} />
-                              <span className="text-[9px] font-black uppercase">À VENIR</span>
+                              <span className="text-[9px] font-black uppercase">EN ATTENTE</span>
                             </div>
                           ) : null}
                           <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">

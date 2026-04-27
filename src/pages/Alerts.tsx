@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, Bell, Filter, Search, ChevronDown } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Bell, Filter, Search, ChevronDown, X, Users } from 'lucide-react';
 import { AbsenceAlert } from '../types';
 
 import { API_URL } from '../config';
@@ -11,23 +11,47 @@ export default function Alerts() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'acknowledged' | 'resolved'>('all');
   const [search, setSearch] = useState('');
+  
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedCourseName, setSelectedCourseName] = useState<string>('');
+  const [courseStudents, setCourseStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  const loadCourseStudents = async (courseId: string, courseName: string) => {
+    setSelectedCourseId(courseId);
+    setSelectedCourseName(courseName);
+    setLoadingStudents(true);
+    try {
+      const res = await fetch(`${API}/api/courses/${courseId}/students`);
+      if (res.ok) {
+        const data = await res.json();
+        setCourseStudents(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
 
   useEffect(() => {
     fetchAlerts();
+    const interval = setInterval(() => fetchAlerts(true), 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  async function fetchAlerts() {
-    setLoading(true);
-    setError(null);
+  async function fetchAlerts(silent = false) {
+    if (!silent) setLoading(true);
+    if (!silent) setError(null);
     try {
       const res = await fetch(`${API}/api/alerts`);
       if (!res.ok) throw new Error('Erreur API');
       const data = await res.json();
       setAlerts(data ?? []);
     } catch (_e) {
-      setError('Impossible de charger les alertes.');
+      if (!silent) setError('Impossible de charger les alertes.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -263,7 +287,12 @@ export default function Alerts() {
                     <div className="mt-3 flex flex-wrap gap-3">
                       <div className="flex-1 min-w-40">
                         <p className="text-slate-500 text-xs mb-1">Cours</p>
-                        <p className="text-slate-700 text-sm font-medium">{course?.name}</p>
+                        <button 
+                          onClick={() => loadCourseStudents(alert.course_id, course?.name || '')}
+                          className="text-slate-700 text-sm font-medium hover:text-blue-600 hover:underline text-left"
+                        >
+                          {course?.name}
+                        </button>
                         <p className="text-slate-400 text-xs">{course?.teacher_name}</p>
                       </div>
                       <div>
@@ -299,6 +328,82 @@ export default function Alerts() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {selectedCourseId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden">
+            <div className="p-8 border-b flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                  {selectedCourseName}
+                </h3>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+                  Recherche & Inspection des étudiants au cours
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedCourseId(null)}
+                className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors shadow-sm"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+              {loadingStudents ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Calcul de la liste IA...</p>
+                </div>
+              ) : courseStudents.length === 0 ? (
+                <div className="text-center py-20 space-y-4">
+                  <Users size={48} className="mx-auto text-slate-200" />
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Aucun étudiant trouvé pour ce cours</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {courseStudents.map((s) => (
+                    <div key={s.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-4 hover:border-blue-300 transition-all group">
+                      <div className="w-12 h-12 rounded-xl border-2 border-white shadow-sm overflow-hidden bg-white">
+                        <img 
+                          src={s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.full_name)}&background=3b82f6&color=fff`} 
+                          alt={s.full_name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800 truncate">{s.full_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
+                          <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
+                            s.absence_count >= (s.absence_threshold || 5) ? 'bg-red-100 text-red-600 animate-pulse' :
+                            s.absence_count >= (s.absence_threshold || 5) - 1 ? 'bg-amber-100 text-amber-600' :
+                            'bg-emerald-100 text-emerald-600'
+                          }`}>
+                            {s.absence_count >= (s.absence_threshold || 5) ? 'CRITIQUE' : 
+                             s.absence_count >= (s.absence_threshold || 5) - 1 ? 'ATTENTION' : 'SÛR'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-xs font-black ${s.absence_count >= (s.absence_threshold || 5) ? 'text-red-500' : 'text-slate-800'}`}>
+                          {s.absence_count}/{s.absence_threshold || 5}
+                        </p>
+                        <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t bg-slate-50 flex items-center justify-between text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
+              <span>Total : {courseStudents.length} Étudiants</span>
+              <span>FaceAttend AI Matrix Active</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

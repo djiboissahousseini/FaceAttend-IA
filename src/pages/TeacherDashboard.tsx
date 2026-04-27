@@ -22,6 +22,7 @@ import {
   MonitorPlay,
   PowerOff,
   PlayCircle,
+  CheckCircle2,
   XCircle,
   ExternalLink,
   ImagePlus,
@@ -306,9 +307,9 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
     }
   }, [loggedInTeacher]); // Removed activeClassroom from deps to break the loop
 
-  const loadCourseStudents = async (course: Course) => {
+  const loadCourseStudents = async (course: Course, silent = false) => {
     setSelectedCourse(course);
-    setLoadingStudents(true);
+    if (!silent) setLoadingStudents(true);
     try {
       const res = await fetch(`${API_URL}/api/courses/${course.id}/students`);
       if (res.ok) {
@@ -318,16 +319,28 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
     } catch (e) {
       console.error(e);
     } finally {
-      setLoadingStudents(false);
+      if (!silent) setLoadingStudents(false);
     }
   };
+
+  useEffect(() => {
+    if (selectedCourse) {
+      const interval = setInterval(() => {
+        loadCourseStudents(selectedCourse, true);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedCourse]);
 
   useEffect(() => {
     document.title = 'FaceAttend | Enseignant';
     if (loggedInTeacher) {
       checkConnection();
       fetchData();
-      const interval = setInterval(checkConnection, 30_000);
+      const interval = setInterval(() => {
+        checkConnection();
+        fetchData();
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [loggedInTeacher, checkConnection, fetchData]);
@@ -464,6 +477,21 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       )}
 
       <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* University Header */}
+        <div className="flex flex-col items-center justify-center py-4 border-b border-slate-200 mb-2">
+          <img 
+            src="/logo5.jpeg" 
+            alt="Université Belhadj Bouchaïb Aïn Témouchent" 
+            className="w-24 h-24 object-contain mb-3 drop-shadow-md rounded-2xl" 
+          />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-widest text-center">
+            Université Belhadj Bouchaïb
+          </h1>
+          <p className="text-blue-600 text-xs md:text-sm font-bold uppercase tracking-[0.2em] mt-2">
+            Aïn Témouchent
+          </p>
+        </div>
+
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-4">
             <div className="relative group">
@@ -702,7 +730,11 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                         <div className="flex items-center gap-3">
                           {s.id === activeSession?.id ? (
                             <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse">
-                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Live
+                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> EN COURS
+                            </span>
+                          ) : s.status === 'closed' ? (
+                            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-full">
+                              <CheckCircle2 size={12} /> TERMINÉ
                             </span>
                           ) : (
                             <button

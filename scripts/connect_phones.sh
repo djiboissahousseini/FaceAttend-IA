@@ -1,12 +1,10 @@
-#!/bin/bash
-
-# --- CONFIGURATION DES PORTS ---
-FRONTEND_PORT=5173
-BACKEND_PORT=8000
-EXPO_PORT=8081
+# --- DÉTECTION DE L'IP LOCALE ---
+LOCAL_IP=$(hostname -I | awk '{print $1}')
 
 echo "----------------------------------------------------"
-echo "   FACEATTEND CONNECT - CONFIGURATION USB STABLE"
+echo "   FACEATTEND CONNECT - CONFIGURATION MOBILE"
+echo "----------------------------------------------------"
+echo "🌐 ADRESSE IP DU PC : $LOCAL_IP"
 echo "----------------------------------------------------"
 
 # 1. Vérification de la présence d'ADB
