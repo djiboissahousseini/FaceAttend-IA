@@ -1,37 +1,32 @@
-# Historique des Modifications - Section Présence IA & Caméra
+# Historique des Changements - Projet FaceAttend
 
-Ce fichier recense les interventions effectuées par l'assistant IA sur les composants de détection et de gestion des présences.
+## [26/04/2026] - Initialisation du plan "Interconnexion et Alertes Temps Réel"
 
-## 📝 26 Avril 2026
+### État du Système (Avant modifications)
+- **Backend** : Déjà fonctionnel avec la fonction `sync_student_alerts`. Il gère le calcul des absences et l'enregistrement des alertes dans la table `absence_alerts`.
+- **Seuil** : Dynamique (basé sur la table `courses`), par défaut à 3 ou 5 selon la configuration du cours.
+- **Frontend Admin** : Possède un mode "Tunnel IA" (Simulation) pour voir le dashboard enseignant.
+- **Frontend Enseignant** : Affiche déjà une liste d'alertes basique, mais manque de visibilité en temps réel et d'indicateurs de risque colorés.
 
-### 1. Analyse Technique Globale
-- **Reconnaissance :** Identification du moteur DeepFace (Facenet) côté backend et face-api.js côté frontend.
-- **Sécurité :** Vérification de l'implémentation de l'Anti-Spoofing via le calcul de l'EAR (Eye Aspect Ratio).
-- **Automatisation :** Analyse du "IA Tracker" permettant le lancement automatique des sessions basé sur l'emploi du temps.
+### Objectif du Plan
+1. Rendre le système de suivi des absences et alertes totalement interconnecté.
+2. Améliorer l'interface Enseignant (Frontend uniquement) pour un suivi en temps réel.
+3. Ajouter des indicateurs de risque (Vert/Orange/Rouge) basés sur le seuil d'absences.
 
-### 2. Stabilisation & Durcissement (26 Avril 2026)
-- **Command Center :** Restauration des boutons tactiques (Anti-Spoofing, Suivi IA, Pause) et synchronisation avec le bus `localStorage`.
-- **Gestion des Salles :** Création d'une table `classrooms` dédiée et d'une interface de gestion premium pour structurer les lieux physiques.
-- **Lancement Anticipé :** Implémentation de la redirection dynamique de salle (permet de lancer un cours prévu en B1 dans la salle B2 en un clic).
-- **Interface Cours :** Ajout d'une vue "Tableau" organisée avec la colonne "Salle" et renommage des groupes "ALL" en "TOUS LES GROUPES".
-- **Magic QR :** Correction du flux de connexion automatique pour les terminaux mobiles via le portail étudiant.
-- **Intégrité DB :** Correction de la "Salle B5" erronée vers "Salle B2" et sécurisation des formulaires par menus déroulants dynamiques.
-
-### 2. Modifications - ClassroomCamera.tsx
-- **Problème :** La détection automatique du visage ou du clignement pouvait parfois être capricieuse selon l'éclairage, laissant l'utilisateur bloqué sans retour visuel de "scan actif".
-- **Changement :** Ajout d'un mode de déclenchement manuel.
-    - Transformation du bandeau d'information statique en **Bouton Interactif**.
-    - Nouveau bouton **"DÉMARRER MON SCAN"** pour le professeur.
-    - Nouveau bouton **"SCANNER ÉTUDIANT"** pour les élèves.
-    - Ajout d'une barre de progression forcée d'une seconde lors du clic pour laisser le temps à l'utilisateur de se positionner face à l'objectif.
-
-### 3. Analyse - Attendance.tsx (Dashboard Admin)
-- Validation du fonctionnement du "Centre de Commande".
-- Vérification de la synchronisation via `localStorage` pour les commandes :
-    - `OVERRIDE_TEACHER` (Ouverture forcée)
-    - `TOGGLE_LIVENESS` (Anti-Spoofing ON/OFF)
-    - `TOGGLE_AI_MONITORING` (IA Tracker ON/OFF)
-- Confirmation de la liaison directe entre les scans réussis en salle et la mise à jour de la grille des présences dans l'onglet Admin.
-
----
-*Fin du premier rapport d'historique.*
+### Modifications effectuées
+- **Frontend (TeacherDashboard)** : Ajout d'un système de badges de risque dynamiques dans la modal de liste des étudiants.
+    - Badge **CRITICAL** (Rouge pulse) pour les absences >= seuil.
+    - Badge **WARNING** (Orange) pour les absences proches du seuil (seuil - 1).
+    - Badge **SAFE** (Vert) pour les situations normales.
+    - Utilisation d'un seuil par défaut de 5 absences si non spécifié par le backend.
+- **Frontend (TeacherDashboard)** : Amélioration de l'onglet "Alertes IA".
+    - Ajout d'une bannière de rappel du seuil de surveillance.
+    - Ajout d'un badge "Risque Exclusion" clignotant pour les étudiants critiques.
+    - Affichage du ratio d'absences par rapport au seuil pour chaque alerte.
+- **Frontend (Admin Dashboard)** : Intégration d'une vue globale des alertes.
+    - Ajout d'une carte statistique "Alertes IA" sur le tableau de bord principal de l'Administrateur pour un suivi macroscopique des risques d'exclusion.
+- **Frontend (Student Dashboard)** : Automatisation et Synchronisation Totale.
+    - Accélération de la synchronisation (polling réduit à 15s).
+    - Implémentation d'un moteur de risque global (Matrix Sync) qui change la couleur de l'interface selon l'état de l'étudiant.
+    - Ajout d'une bannière d'alerte critique sur l'écran d'accueil en cas de seuil atteint.
+    - Harmonisation visuelle des badges (CRITICAL/WARNING/SAFE) pour une cohérence totale avec les vues Professeur et Admin.

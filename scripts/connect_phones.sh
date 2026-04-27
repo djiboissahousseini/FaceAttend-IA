@@ -1,10 +1,13 @@
-# --- DÉTECTION DE L'IP LOCALE ---
 LOCAL_IP=$(hostname -I | awk '{print $1}')
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
+BACKEND_PORT=${BACKEND_PORT:-8000}
+DROID_PORT=${DROID_PORT:-4747}
 
 echo "----------------------------------------------------"
 echo "   FACEATTEND CONNECT - CONFIGURATION MOBILE"
 echo "----------------------------------------------------"
 echo "🌐 ADRESSE IP DU PC : $LOCAL_IP"
+echo "🔌 PORTS CONFIGURÉS : Web:$FRONTEND_PORT, API:$BACKEND_PORT, DroidCam:$DROID_PORT"
 echo "----------------------------------------------------"
 
 # 1. Vérification de la présence d'ADB
@@ -30,18 +33,24 @@ for dev in $DEVICES
 do
     echo "🔧 Configuration de l'appareil [$dev]..."
     
+    # 1. Reverse pour l'accès mobile -> PC (Dashboard & Backend)
     adb -s $dev reverse tcp:$FRONTEND_PORT tcp:$FRONTEND_PORT
     adb -s $dev reverse tcp:$BACKEND_PORT tcp:$BACKEND_PORT
-    adb -s $dev reverse tcp:$EXPO_PORT tcp:$EXPO_PORT
     
-    echo "   -> Port $FRONTEND_PORT (Caméra) : OK"
-    echo "   -> Port $BACKEND_PORT (Données) : OK"
-    echo "   -> Port $EXPO_PORT (Mobile App) : OK"
+    # 2. Forward pour l'accès PC -> mobile (DroidCam)
+    adb -s $dev forward tcp:$DROID_PORT tcp:$DROID_PORT
+    
+    echo "   -> Port $FRONTEND_PORT (Web/Camera) : OK (Reverse)"
+    echo "   -> Port $BACKEND_PORT (API Data)   : OK (Reverse)"
+    echo "   -> Port $DROID_PORT (DroidCam)   : OK (Forward)"
 done
 
 echo "----------------------------------------------------"
 echo "🚀 CONFIGURATION TERMINÉE !"
 echo "----------------------------------------------------"
-echo "📱 TÉLÉPHONE A (Scanner) : Ouvrez http://localhost:5173/camera"
-echo "📱 TÉLÉPHONE B (App)     : Lancez l'application FaceAttend Connect"
+echo "📸 TÉLÉPHONE A (Caméra IP) : Lancez DroidCam"
+echo "   👉 Sur le PC, lancez: ./scripts/camera.sh connect"
+echo ""
+echo "📱 TÉLÉPHONE B (Interface) : Ouvrez Chrome sur mobile"
+echo "   👉 URL: http://localhost:$FRONTEND_PORT/admin"
 echo "----------------------------------------------------"

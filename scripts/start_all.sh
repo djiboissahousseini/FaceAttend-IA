@@ -4,8 +4,8 @@
 
 echo "🚀 Lancement de FaceAttend..."
 
-# Revenir à la racine du projet
-PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Revenir à la racine du projet (située au-dessus de scripts/)
+PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 cd "$PROJECT_ROOT"
 
 # 1. Détecter l'adresse IP locale

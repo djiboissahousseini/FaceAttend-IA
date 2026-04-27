@@ -835,6 +835,42 @@ def get_active_session(room: str, db: Session = Depends(get_db)):
                 "teacher_name": t_name
             }
 
+        # 1b. Vérifier s'il y a une session PLANIFIÉE (scheduled) pour aujourd'hui et maintenant
+        # Cela permet le réveil automatique de la caméra selon l'agenda.
+        scheduled_query = text("""
+            SELECT id, course_name, group_name, classroom, session_date, is_active, start_time, end_time, teacher_id
+            FROM sessions
+            WHERE classroom = :room 
+              AND session_date = CAST(:today AS date) 
+              AND status = 'scheduled'
+              AND CAST(:now_time AS time) BETWEEN start_time AND end_time
+            ORDER BY start_time ASC LIMIT 1
+        """)
+        sched_res = db.execute(scheduled_query, {
+            "room": room,
+            "today": now.date(),
+            "now_time": now.strftime("%H:%M:%S")
+        }).fetchone()
+
+        if sched_res:
+            t_name = "Professeur"
+            if sched_res[8]:
+                t_q = text("SELECT name FROM teachers WHERE id = :id")
+                t_res = db.execute(t_q, {"id": sched_res[8]}).fetchone()
+                if t_res: t_name = t_res[0]
+
+            return {
+                "id": sched_res[0],
+                "course_name": sched_res[1],
+                "group_name": sched_res[2],
+                "classroom": sched_res[3],
+                "session_date": str(sched_res[4]),
+                "is_active": sched_res[5],
+                "start_time": str(sched_res[6]) if sched_res[6] else None,
+                "end_time": str(sched_res[7]) if sched_res[7] else None,
+                "teacher_name": t_name
+            }
+
         # 2. Si rien n'est forcé, vérifier le planning habituel
         days_map = {0: "Lundi", 1: "Mardi", 2: "Mercredi", 3: "Jeudi", 4: "Vendredi", 5: "Samedi", 6: "Dimanche"}
         today_fr = days_map[now.weekday()]
