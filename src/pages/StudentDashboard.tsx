@@ -1,23 +1,20 @@
 import { getPhotoUrl } from '../utils/image';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { API_URL } from '../config';
 const API = API_URL;
 import {
   BookOpen,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   History,
   User,
   Cpu,
-  GraduationCap,
   LogOut,
   ScanFace,
   CalendarDays,
   Clock,
   MapPin,
   RefreshCw,
-  ShieldAlert,
 } from 'lucide-react';
 import StudentLayout from '../components/StudentLayout';
 import { DOC_TITLE } from '../constants/documentTitles';
@@ -66,14 +63,6 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // ─── AUTOMATIC RISK ENGINE (SUPER-SYNC) ───────────────────────────────────
-  const globalRisk = useMemo(() => {
-    if (!stats?.modules) return 'SAFE';
-    const hasCritical = stats.modules.some(m => m.absences >= (m.threshold || 5));
-    if (hasCritical) return 'CRITICAL';
-    const hasWarning = stats.modules.some(m => m.absences >= (m.threshold || 5) - 1);
-    if (hasWarning) return 'WARNING';
-    return 'SAFE';
-  }, [stats?.modules]);
 
   useEffect(() => {
     document.title = DOC_TITLE.studentApp;
@@ -171,7 +160,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-[#020617] flex items-center justify-center transition-colors duration-500">
         <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(16,185,129,0.3)]" />
       </div>
     );
@@ -179,8 +168,8 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
 
   // ─── En-tête établissement (sans logo image : réservé aux dashboards admin / enseignant) ───
   const UniversityHeader = () => (
-    <div className="w-full relative bg-gradient-to-br from-slate-900 via-[#0b1219] to-slate-950 rounded-[2.5rem] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.6)] border border-white/5 overflow-hidden flex items-center min-h-[140px] mb-8 group transition-all duration-500 hover:border-emerald-500/20 hover:shadow-[0_20px_60px_rgba(16,185,129,0.1)]">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full -mr-32 -mt-32 transition-all duration-700 group-hover:bg-emerald-500/20" />
+    <div className="w-full relative bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:via-[#0b1219] dark:to-slate-950 rounded-[2.5rem] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.6)] border border-slate-200 dark:border-white/5 overflow-hidden flex items-center min-h-[140px] mb-8 group transition-all duration-500 hover:border-emerald-300 dark:hover:border-emerald-500/20 hover:shadow-[0_20px_60px_rgba(16,185,129,0.1)]">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 dark:bg-emerald-500/10 blur-[100px] rounded-full -mr-32 -mt-32 transition-all duration-700 group-hover:bg-emerald-500/10 dark:group-hover:bg-emerald-500/20" />
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/5 blur-[80px] rounded-full -ml-16 -mb-16" />
       <div className="flex items-center w-full relative z-10">
         <div className="w-20 h-20 rounded-[1.5rem] bg-white border border-emerald-500/25 flex items-center justify-center flex-shrink-0 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative group-hover:scale-105 transition-transform duration-500 overflow-hidden p-2">
@@ -192,10 +181,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
         </div>
         <div className="ml-6 space-y-1">
           <div className="space-y-0">
-            <h2 className="text-white font-black text-[17px] uppercase tracking-tighter leading-tight">
+            <h2 className="text-slate-900 dark:text-white font-black text-[17px] uppercase tracking-tighter leading-tight">
               Université Belhadj Bouchaïb
             </h2>
-            <h3 className="text-slate-400 font-bold text-[13px] uppercase tracking-wider leading-none">
+            <h3 className="text-slate-500 dark:text-slate-400 font-bold text-[13px] uppercase tracking-wider leading-none">
               Aïn Témouchent
             </h3>
           </div>
@@ -220,12 +209,12 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]" />
               <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Live Sync Active</span>
             </div>
-            <button 
+            <button
               onClick={() => {
                 setLoading(true);
                 fetchStats(student?.id || simulatedStudentId || '');
               }}
-              className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 transition-all active:scale-90"
+              className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-all active:scale-90 shadow-sm dark:shadow-none"
               title="Actualiser mes données"
             >
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -261,10 +250,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center mt-2">
-                <p className="text-[12px] text-emerald-400 font-black uppercase tracking-[0.5em] mb-1 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">
+                <p className="text-[12px] text-emerald-500 dark:text-emerald-400 font-black uppercase tracking-[0.5em] mb-1 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)] dark:drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">
                   Assiduité
                 </p>
-                <span className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                <span className="text-7xl font-black text-slate-900 dark:text-white tracking-tighter drop-shadow-sm dark:drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                   {stats?.attendance_rate}%
                 </span>
                 <div className="w-16 h-1 bg-gradient-to-r from-emerald-500/0 via-emerald-500/50 to-emerald-500/0 mt-3" />
@@ -272,21 +261,21 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             </div>
 
             <div className="grid grid-cols-2 gap-4 w-full max-w-[340px] mt-12 px-2">
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-emerald-500/50 shadow-2xl group">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 mb-1 group-hover:scale-110 transition-transform">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-emerald-300 dark:hover:border-emerald-500/50 shadow-[0_10px_30px_rgba(0,0,0,0.05)] dark:shadow-2xl group">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400 mb-1 group-hover:scale-110 transition-transform">
                   <CheckCircle2 size={16} />
                 </div>
-                <p className="text-4xl font-black text-white">{stats?.total_presences}</p>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
+                <p className="text-4xl font-black text-slate-900 dark:text-white">{stats?.total_presences}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-[0.3em]">
                   Présences
                 </p>
               </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-red-500/50 shadow-2xl group">
-                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 mb-1 group-hover:scale-110 transition-transform">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center gap-2 transition-all hover:border-red-300 dark:hover:border-red-500/50 shadow-[0_10px_30px_rgba(0,0,0,0.05)] dark:shadow-2xl group">
+                <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-red-500 dark:text-red-400 mb-1 group-hover:scale-110 transition-transform">
                   <XCircle size={16} />
                 </div>
-                <p className="text-4xl font-black text-white">{stats?.total_absences}</p>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
+                <p className="text-4xl font-black text-slate-900 dark:text-white">{stats?.total_absences}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-[0.3em]">
                   Absences
                 </p>
               </div>
@@ -294,9 +283,9 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           </div>
 
           <div className="w-full pt-4 pb-8 px-2">
-            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-6 flex flex-col items-center gap-4 relative overflow-hidden shadow-2xl">
-              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent opacity-80" />
-              <h1 className="text-2xl font-black text-white uppercase tracking-tight text-center leading-tight">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-6 flex flex-col items-center gap-4 relative overflow-hidden shadow-xl dark:shadow-2xl">
+              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 dark:via-emerald-500 to-transparent opacity-80" />
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight text-center leading-tight">
                 {student?.name}
               </h1>
 
@@ -304,22 +293,22 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                 <span className="text-[10px] font-black text-slate-500 tracking-[0.2em]">
                   {student?.email?.toLowerCase() || 'email@etudiant.univ'}
                 </span>
-                <span className="text-[12px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-4 py-1 rounded-full border border-emerald-500/20">
+                <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-500/10 px-4 py-1 rounded-full border border-emerald-200 dark:border-emerald-500/20">
                   {student?.filiere || 'Filière non définie'}
                 </span>
               </div>
 
-              <div className="flex items-center gap-4 bg-black/60 px-6 py-2.5 rounded-full border border-slate-800">
+              <div className="flex items-center gap-4 bg-slate-50 dark:bg-black/60 px-6 py-2.5 rounded-full border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <ScanFace size={14} className="text-emerald-400" />
-                  <span className="text-[12px] font-black text-emerald-400 uppercase tracking-[0.3em] drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+                  <ScanFace size={14} className="text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.3em] drop-shadow-none dark:drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
                     {student?.code}
                   </span>
                 </div>
-                <div className="w-[1px] h-4 bg-slate-800" />
+                <div className="w-[1px] h-4 bg-slate-300 dark:bg-slate-800" />
                 <div className="flex items-center gap-2">
                   <User size={14} className="text-slate-400" />
-                  <span className="text-[12px] font-black text-slate-300 uppercase tracking-[0.3em]">
+                  <span className="text-[12px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-[0.3em]">
                     G{student?.group?.replace(/\D/g, '') || '2'}
                   </span>
                 </div>
@@ -337,10 +326,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter drop-shadow-lg">
+              <h3 className="text-slate-900 dark:text-white font-black text-2xl uppercase tracking-tighter drop-shadow-sm dark:drop-shadow-lg">
                 Mes Modules
               </h3>
-              <p className="text-emerald-400 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+              <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
                 Suivi de présence expert
               </p>
             </div>
@@ -360,7 +349,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               return (
                 <div
                   key={i}
-                  className={`bg-slate-900 border ${isThresholdReached ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : isCritical ? 'border-orange-500/50' : 'border-slate-800 hover:border-emerald-500/50'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 shadow-xl group relative overflow-hidden`}
+                  className={`bg-white dark:bg-slate-900 border ${isThresholdReached ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : isCritical ? 'border-orange-500/50' : 'border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-500/50'} p-6 rounded-[2rem] space-y-4 transition-all duration-300 shadow-md dark:shadow-xl group relative overflow-hidden`}
                 >
                   {isThresholdReached && (
                     <div className="absolute top-0 right-0 bg-red-500 text-white text-[8px] font-black px-4 py-1 rounded-bl-xl uppercase tracking-widest animate-pulse">
@@ -370,7 +359,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <span className="text-sm font-black text-white uppercase tracking-tight truncate block max-w-[200px]">
+                      <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight truncate block max-w-[200px]">
                         {m.name}
                       </span>
                       <div className="flex gap-2">
@@ -378,7 +367,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                           {m.teacher || 'Professeur'}
                         </span>
                         {m.course_type && (
-                          <span className="text-[8px] font-black text-emerald-500/80 uppercase tracking-widest bg-emerald-500/5 px-1.5 rounded">
+                          <span className="text-[8px] font-black text-emerald-600 dark:text-emerald-500/80 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-500/5 px-1.5 rounded">
                             {m.course_type}
                           </span>
                         )}
@@ -409,15 +398,15 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                         <span className="text-[8px] text-slate-500 font-black uppercase tracking-wider">
                           Présences
                         </span>
-                        <span className="text-xs font-black text-white">{m.presences}</span>
+                        <span className="text-xs font-black text-slate-900 dark:text-white">{m.presences}</span>
                       </div>
-                      <div className="w-[1px] h-4 bg-slate-800" />
+                      <div className="w-[1px] h-4 bg-slate-200 dark:bg-slate-800" />
                       <div className="flex flex-col">
                         <span className="text-[8px] text-slate-500 font-black uppercase tracking-wider">
                           Absences
                         </span>
                         <span
-                          className={`text-xs font-black ${m.absences > 0 ? 'text-red-400' : 'text-white'}`}
+                          className={`text-xs font-black ${m.absences > 0 ? 'text-red-500 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}
                         >
                           {m.absences}
                         </span>
@@ -425,7 +414,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                     </div>
 
                     <div
-                      className={`text-right px-3 py-1.5 rounded-xl border ${isThresholdReached ? 'bg-red-500/10 border-red-500/20' : 'bg-slate-950/50 border-white/5'}`}
+                      className={`text-right px-3 py-1.5 rounded-xl border ${isThresholdReached ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20' : 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-white/5'}`}
                     >
                       {isThresholdReached ? (
                         <p className="text-[9px] text-red-500 font-black uppercase tracking-tighter">
@@ -433,10 +422,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                         </p>
                       ) : (
                         <p
-                          className={`text-[9px] font-black uppercase tracking-tighter ${isCritical ? 'text-orange-400' : 'text-slate-400'}`}
+                          className={`text-[9px] font-black uppercase tracking-tighter ${isCritical ? 'text-orange-500 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'}`}
                         >
                           Absences possibles :{' '}
-                          <span className="text-white ml-1 font-black">{remainingAbsences}</span>
+                          <span className="text-slate-900 dark:text-white ml-1 font-black">{remainingAbsences}</span>
                         </p>
                       )}
                     </div>
@@ -456,10 +445,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+              <h3 className="text-slate-900 dark:text-white font-black text-2xl uppercase tracking-tighter">
                 Historique Scans
               </h3>
-              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+              <p className="text-emerald-600/60 dark:text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
                 Journal de bord sécurisé
               </p>
             </div>
@@ -471,27 +460,27 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
               return (
                 <div
                   key={i}
-                  className={`bg-slate-900/40 border-l-4 ${isPresent ? 'border-l-emerald-500' : 'border-l-red-500'} border-y border-r border-white/5 p-4 rounded-2xl flex items-center justify-between transition-all hover:bg-slate-900/60 hover:scale-[1.01]`}
+                  className={`bg-white dark:bg-slate-900/40 border-l-4 ${isPresent ? 'border-l-emerald-500' : 'border-l-red-500'} border-y border-r border-slate-200 dark:border-white/5 p-4 rounded-2xl flex items-center justify-between transition-all hover:bg-slate-50 dark:hover:bg-slate-900/60 hover:scale-[1.01] shadow-sm`}
                 >
                   <div className="flex items-center gap-4">
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${isPresent ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${isPresent ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'}`}
                     >
                       {isPresent ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[13px] font-black text-white uppercase tracking-tight truncate max-w-[150px]">
+                      <p className="text-[13px] font-black text-slate-900 dark:text-white uppercase tracking-tight truncate max-w-[150px]">
                         {h.course_name}
                       </p>
                       <p
-                        className={`text-[9px] font-black uppercase tracking-[0.2em] ${isPresent ? 'text-emerald-500/70' : 'text-red-500/70'}`}
+                        className={`text-[9px] font-black uppercase tracking-[0.2em] ${isPresent ? 'text-emerald-600/70 dark:text-emerald-500/70' : 'text-red-600/70 dark:text-red-500/70'}`}
                       >
                         {isPresent ? 'Présence validée' : 'Absence marquée'}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-tight">
+                    <p className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-tight">
                       {new Date(h.date).toLocaleDateString('fr-FR', {
                         day: '2-digit',
                         month: 'short',
@@ -544,10 +533,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           <UniversityHeader />
           <div className="px-4 flex items-end justify-between">
             <div>
-              <h3 className="text-white font-black text-2xl uppercase tracking-tighter">
+              <h3 className="text-slate-900 dark:text-white font-black text-2xl uppercase tracking-tighter">
                 Emploi du Temps
               </h3>
-              <p className="text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
+              <p className="text-emerald-600/60 dark:text-emerald-500/60 text-[10px] font-black uppercase mt-1 tracking-[0.3em]">
                 Planning Structuré
               </p>
             </div>
@@ -555,7 +544,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
           </div>
           <div className="space-y-6 px-2">
             {sortedDays.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 p-8 rounded-[2rem] text-center">
+              <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-8 rounded-[2rem] text-center shadow-sm">
                 <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">
                   Aucun cours planifié
                 </p>
@@ -563,53 +552,52 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             ) : (
               sortedDays.map((day) => (
                 <div key={day} className="space-y-3">
-                  <h4 className="text-emerald-400 font-black uppercase tracking-[0.2em] text-xs pl-2 border-l-2 border-emerald-500">
+                  <h4 className="text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-[0.2em] text-xs pl-2 border-l-2 border-emerald-500">
                     {day}
                   </h4>
                   <div className="space-y-3">
                     {groupedModules[day].map((m, i) => (
                       <div
                         key={i}
-                        className="bg-slate-900 border border-slate-800 p-5 rounded-[2rem] space-y-3 transition-all hover:border-emerald-500/50 shadow-xl group relative overflow-hidden"
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-[2rem] space-y-3 transition-all hover:border-emerald-300 dark:hover:border-emerald-500/50 shadow-md dark:shadow-xl group relative overflow-hidden"
                       >
                         <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/10 transition-colors" />
 
                         <div className="flex justify-between items-start relative z-10 gap-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-white font-black uppercase tracking-tight text-[15px] leading-tight">
+                            <h4 className="text-slate-900 dark:text-white font-black uppercase tracking-tight text-[15px] leading-tight">
                               {m.name}
                             </h4>
                             {m.course_type && (
                               <span
-                                className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                                  m.course_type === 'TP'
-                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                    : m.course_type === 'TD'
-                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                }`}
+                                className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${m.course_type === 'TP'
+                                  ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
+                                  : m.course_type === 'TD'
+                                    ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20'
+                                    : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
+                                  }`}
                               >
                                 {m.course_type}
                               </span>
                             )}
                           </div>
                           {m.teacher && (
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-800/80 px-2 py-1 rounded-lg border border-white/5 shrink-0">
+                            <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-200 dark:border-white/5 shrink-0">
                               {m.teacher}
                             </span>
                           )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 mt-2 relative z-10">
-                          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                          <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-white/5 flex items-center gap-2">
                             <Clock size={14} className="text-emerald-500/70" />
-                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest">
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">
                               {m.schedule_time}
                             </span>
                           </div>
-                          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                          <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-white/5 flex items-center gap-2">
                             <MapPin size={14} className="text-emerald-500/70" />
-                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest truncate">
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest truncate">
                               {m.room || 'Non définie'}
                             </span>
                           </div>
@@ -630,13 +618,13 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
       return (
         <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
           <UniversityHeader />
-          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 flex flex-col items-center gap-5 text-center mx-2 relative overflow-hidden group shadow-2xl">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 flex flex-col items-center gap-5 text-center mx-2 relative overflow-hidden group shadow-md dark:shadow-2xl">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[50px] rounded-full -mr-10 -mt-10 pointer-events-none" />
 
             <div className="relative">
               <div className="absolute -inset-3 bg-emerald-500/20 rounded-full blur-xl opacity-40 animate-pulse" />
               <div className="absolute inset-0 rounded-full border-2 border-emerald-500/30 scale-110 animate-[spin_10s_linear_infinite] border-t-emerald-500 border-r-transparent" />
-              <div className="relative w-28 h-28 rounded-full border border-emerald-500/50 p-1 bg-slate-950 z-10 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+              <div className="relative w-28 h-28 rounded-full border border-emerald-500/50 p-1 bg-slate-50 dark:bg-slate-950 z-10 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
                 <img
                   src={
                     getPhotoUrl(student?.photo_url) ||
@@ -652,7 +640,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
-                  className="absolute bottom-0 right-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 border-4 border-slate-950 hover:bg-emerald-400 transition-all active:scale-90 shadow-xl z-20 group"
+                  className="absolute bottom-0 right-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white dark:text-slate-950 border-4 border-white dark:border-slate-950 hover:bg-emerald-400 transition-all active:scale-90 shadow-xl z-20 group"
                   title="Changer ma photo"
                 >
                   {isUploading ? (
@@ -660,9 +648,9 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
                   ) : (
                     <ScanFace size={18} />
                   )}
-                  
+
                   {/* Floating Tooltip */}
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase rounded pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-emerald-500 text-white dark:text-slate-950 text-[10px] font-black uppercase rounded pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                     Mise à jour IA
                   </div>
                 </button>
@@ -679,10 +667,10 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             />
 
             <div className="space-y-1 z-10">
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none">
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">
                 {student?.name}
               </h2>
-              <p className="text-emerald-500 text-[11px] font-black uppercase tracking-[0.4em]">
+              <p className="text-emerald-600 dark:text-emerald-500 text-[11px] font-black uppercase tracking-[0.4em]">
                 {student?.code}
               </p>
             </div>
@@ -708,16 +696,16 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             ].map((item, idx) => (
               <div
                 key={idx}
-                className="bg-slate-900 p-5 rounded-[1.5rem] border border-slate-800 flex items-center gap-5 transition-all hover:border-emerald-500/40 group shadow-lg"
+                className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border border-slate-200 dark:border-slate-800 flex items-center gap-5 transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 group shadow-sm dark:shadow-lg"
               >
-                <div className="w-12 h-12 rounded-[1rem] bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all">
+                <div className="w-12 h-12 rounded-[1rem] bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-500/20 transition-all">
                   {item.icon}
                 </div>
                 <div className="text-left flex-1">
                   <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em]">
                     {item.label}
                   </p>
-                  <p className="text-[14px] font-black text-white mt-0.5 tracking-tight break-all">
+                  <p className="text-[14px] font-black text-slate-900 dark:text-white mt-0.5 tracking-tight break-all">
                     {item.value}
                   </p>
                 </div>
@@ -729,7 +717,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
             <div className="px-2 pt-4 pb-6">
               <button
                 onClick={onLogout}
-                className="w-full flex items-center justify-center gap-3 p-5 rounded-[1.5rem] bg-gradient-to-r from-red-500/5 to-red-500/10 border border-red-500/20 text-red-400 font-black uppercase text-[11px] tracking-[0.3em] transition-all hover:from-red-500/10 hover:to-red-500/20 hover:scale-[1.02]"
+                className="w-full flex items-center justify-center gap-3 p-5 rounded-[1.5rem] bg-gradient-to-r from-red-50 to-red-100 dark:from-red-500/5 dark:to-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 font-black uppercase text-[11px] tracking-[0.3em] transition-all hover:from-red-100 hover:to-red-200 dark:hover:from-red-500/10 dark:hover:to-red-500/20 hover:scale-[1.02]"
               >
                 <LogOut size={18} />
                 Déconnecter la session

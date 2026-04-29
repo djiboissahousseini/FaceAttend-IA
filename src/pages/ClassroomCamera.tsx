@@ -67,13 +67,22 @@ export default function ClassroomCamera() {
       speak(`Bienvenue, Monsieur ${resData.name}.`);
     } else if (newStatus === 'success') {
       playSound('success');
-      // Pas de voix pour les étudiants
+      speak(`Présence validée pour ${resData.name}.`);
     } else if (newStatus === 'duplicate') {
       playSound('warning');
+      speak(`${resData.name}, vous êtes déjà enregistré.`);
     } else if (newStatus === 'wrong_group') {
       playSound('error');
-    } else if (newStatus === 'unknown' || newStatus === 'error' || newStatus === 'teacher_error' || newStatus === 'liveness_failed') {
+      speak(`${resData.name}, ce n'est pas votre groupe.`);
+    } else if (newStatus === 'liveness_failed') {
       playSound('error');
+      speak(`Alerte sécurité : tentative de fraude détectée.`);
+    } else if (newStatus === 'unknown') {
+      playSound('error');
+      speak(`Identité non reconnue.`);
+    } else if (newStatus === 'error' || newStatus === 'teacher_error') {
+      playSound('error');
+      speak(`Erreur système.`);
     }
 
     setTimeout(() => {

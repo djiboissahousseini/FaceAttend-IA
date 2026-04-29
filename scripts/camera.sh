@@ -10,6 +10,8 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+DROID_PORT=4747
+
 
 function show_help() {
     echo -e "${BLUE}==================================================${NC}"
@@ -68,9 +70,12 @@ function connect_usb() {
     fi
 
     # Libération du périphérique vidéo si déjà utilisé
-    VIDEO_DEV=$(v4l2-ctl --list-devices 2>/dev/null | grep -A 1 "FaceAttend Camera" | grep "/dev/video" | awk '{print $1}')
+    VIDEO_DEV=$(v4l2-ctl --list-devices 2>/dev/null | grep -A 1 "FaceAttend Camera" | grep "/dev/video" | head -n 1 | awk '{print $1}')
     if [ -z "$VIDEO_DEV" ]; then
-        VIDEO_DEV="/dev/video4"
+        VIDEO_DEV=$(v4l2-ctl --list-devices 2>/dev/null | grep -A 1 "v4l2loopback" | grep "/dev/video" | head -n 1 | awk '{print $1}')
+    fi
+    if [ -z "$VIDEO_DEV" ]; then
+        VIDEO_DEV="/dev/video0"
     fi
 
     OLD_PID=$(fuser "$VIDEO_DEV" 2>/dev/null | awk '{print $1}')
@@ -82,11 +87,11 @@ function connect_usb() {
     fi
 
     # Tunnel USB
-    adb forward tcp:4747 tcp:4747
+    adb forward tcp:"$DROID_PORT" tcp:"$DROID_PORT"
     echo -e "${GREEN}✅ Tunnel USB prêt.${NC}"
 
     echo "🎯 Capture via $VIDEO_DEV... (Ctrl+C pour arrêter)"
-    droidcam-cli adb 4747
+    droidcam-cli -dev="$VIDEO_DEV" adb "$DROID_PORT"
 }
 
 # Logique principale

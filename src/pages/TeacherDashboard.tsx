@@ -91,6 +91,70 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [localCourseAttendance, setLocalCourseAttendance] = useState<Record<string, string>>({});
+
+  const markCourseAttendance = async (studentId: string, status: string) => {
+    if (!selectedCourse) return;
+
+    // Find or create a session for today
+    const todayStr = new Date().toISOString().split('T')[0];
+    let sessionId = allSessions.find(s => s.course_name === selectedCourse.name && s.session_date === todayStr)?.id;
+
+    if (!sessionId) {
+      if (!confirm(`Aucune session trouvée pour aujourd'hui. Voulez-vous créer une session pour "${selectedCourse.name}" afin de marquer la présence ?`)) return;
+      try {
+        const res = await fetch(`${API_URL}/api/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacher_id: Number(loggedInTeacher?.id),
+            course_name: selectedCourse.name,
+            group_name: selectedCourse.group_name || 'ALL',
+            classroom: selectedCourse.room || 'Salle B1',
+            session_date: todayStr,
+            start_time: selectedCourse.schedule_time || '08:00',
+            end_time: '10:00',
+            status: 'closed',
+            is_active: false
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sessionId = data.id;
+          fetchData();
+        } else {
+          return;
+        }
+      } catch (e) {
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/records/upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: studentId,
+          session_id: String(sessionId),
+          status,
+          method: 'manual',
+        }),
+      });
+      if (res.ok) {
+        setLocalCourseAttendance(prev => ({ ...prev, [studentId]: status }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCourse) {
+      setLocalCourseAttendance({}); // reset when changing course
+    }
+  }, [selectedCourse]);
+
   useEffect(() => {
     if (loggedInTeacher) {
       localStorage.setItem('faceattend_simulated_teacher', JSON.stringify(loggedInTeacher));
@@ -174,7 +238,7 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
               setLoggedInTeacher(simUser);
             }
           }
-          
+
           // Load list for simulation selection
           const teachers = await getTeachers();
           setTeachersList(Array.isArray(teachers) ? (teachers as Teacher[]) : []);
@@ -190,7 +254,7 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
 
   const handleLogout = () => {
     const role = localStorage.getItem('faceattend_role');
-    
+
     if (mode === 'simulation') {
       localStorage.removeItem('faceattend_sim_target');
       setLoggedInTeacher(null);
@@ -292,7 +356,7 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       } catch (err) {
         console.error("Alerts Load Error:", err);
       }
-      
+
       if (Array.isArray(roomsData) && roomsData.length > 0) {
         setClassrooms(roomsData);
         // Only set default if not already set by user or storage
@@ -309,15 +373,22 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
 
   const loadCourseStudents = async (course: Course, silent = false) => {
     setSelectedCourse(course);
-    if (!silent) setLoadingStudents(true);
+    if (!silent) {
+      setLoadingStudents(true);
+      setCourseStudents([]); // Clear previous list
+    }
     try {
       const res = await fetch(`${API_URL}/api/courses/${course.id}/students`);
       if (res.ok) {
         const data = await res.json();
-        setCourseStudents(data);
+        setCourseStudents(Array.isArray(data) ? data : []);
+      } else {
+        console.error("Failed to fetch students", res.status);
+        if (!silent) setCourseStudents([]);
       }
     } catch (e) {
       console.error(e);
+      if (!silent) setCourseStudents([]);
     } finally {
       if (!silent) setLoadingStudents(false);
     }
@@ -372,6 +443,27 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       timestamp: Date.now(),
     };
     localStorage.setItem(`faceattend_cmd_${activeClassroom}`, JSON.stringify(commandData));
+  };
+
+  const closeActiveSession = async () => {
+    if (!activeSession) return;
+
+    if (!confirm("Voulez-vous vraiment terminer cette session ? Cela clôturera la session et marquera tous les étudiants non scannés comme absents.")) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/sessions/${activeSession.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'closed', end_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
+      });
+      if (res.ok) {
+        sendCommand('FORCE_STANDBY');
+        setActiveSession(null);
+        fetchData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   // ─── FILTER LOGIC (SECURED) ────────────────────────────────────────────────
@@ -479,10 +571,10 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* University Header */}
         <div className="flex flex-col items-center justify-center py-4 border-b border-slate-200 mb-2">
-          <img 
-            src="/logo5.jpeg" 
-            alt="Université Belhadj Bouchaïb Aïn Témouchent" 
-            className="w-24 h-24 object-contain mb-3 drop-shadow-md rounded-2xl" 
+          <img
+            src="/logo5.jpeg"
+            alt="Université Belhadj Bouchaïb Aïn Témouchent"
+            className="w-24 h-24 object-contain mb-3 drop-shadow-md rounded-2xl"
           />
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-widest text-center">
             Université Belhadj Bouchaïb
@@ -649,28 +741,52 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
             </div>
 
             {/* Active Session / Controls */}
-            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
+            <div
+              className={`bg-white rounded-3xl border border-slate-200 p-8 shadow-sm transition-all ${activeSession ? 'cursor-pointer hover:border-blue-300 group' : ''}`}
+              onClick={() => {
+                if (activeSession) {
+                  const course = allCourses.find(c => c.name === activeSession.course_name);
+                  if (course) loadCourseStudents(course);
+                  else loadCourseStudents({
+                    id: activeSession.course_id || '',
+                    name: activeSession.course_name,
+                    group_name: activeSession.group_name
+                  } as Course);
+                }
+              }}
+            >
               {activeSession ? (
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                  <div>
-                    <span className="bg-blue-100 text-blue-600 text-[10px] font-black uppercase px-2 py-1 rounded-lg mb-2 inline-block">Session en cours</span>
-                    <h3 className="text-2xl font-black text-slate-900 leading-tight">{activeSession.course_name}</h3>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="bg-blue-100 text-blue-600 text-[10px] font-black uppercase px-2 py-1 rounded-lg">Session en cours</span>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase group-hover:text-blue-500 transition-colors">Cliquer pour voir la liste étudiants</span>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-900 leading-tight group-hover:text-blue-600 transition-colors">{activeSession.course_name}</h3>
                     <p className="text-slate-500 font-medium">Groupe {activeSession.group_name} • {activeSession.classroom}</p>
+                    <p className="text-slate-400 text-xs mt-1">Professeur : {activeSession.teacher_name || 'Inconnu'}</p>
                   </div>
-                  <div className="flex gap-3 w-full md:w-auto">
-                    <button
-                      onClick={() => sendCommand('OVERRIDE_TEACHER')}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20"
-                    >
-                      <Unlock size={18} /> Ouvrir
-                    </button>
-                    <button
-                      onClick={() => sendCommand('FORCE_STANDBY')}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-red-500/20"
-                    >
-                      <PowerOff size={18} /> Fermer
-                    </button>
-                  </div>
+                  {loggedInTeacher && (String(activeSession.teacher_id) === String(loggedInTeacher.id) || activeSession.teacher_name === loggedInTeacher.name) ? (
+                    <div className="flex gap-3 w-full md:w-auto" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => sendCommand('OVERRIDE_TEACHER')}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+                      >
+                        <Unlock size={18} /> Ouvrir
+                      </button>
+                      <button
+                        onClick={closeActiveSession}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-red-500/20"
+                      >
+                        <PowerOff size={18} /> Fermer la session
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-xl flex items-center gap-3">
+                      <Lock size={16} className="text-slate-400" />
+                      <p className="text-xs font-bold text-slate-500 uppercase">Verrouillé (Autre Professeur)</p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="py-10 text-center space-y-4">
@@ -716,38 +832,59 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                   myTodaySessions.length === 0 ? (
                     <p className="p-12 text-center text-slate-400 text-sm italic">Aucun cours prévu aujourd'hui.</p>
                   ) : (
-                    myTodaySessions.map(s => (
-                      <div key={s.id} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${s.id === activeSession?.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                            <Clock size={20} />
+                    myTodaySessions.map(s => {
+                      const sessionCourse = allCourses.find(c => c.name === s.course_name);
+                      return (
+                        <div
+                          key={s.id}
+                          className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            if (sessionCourse) {
+                              loadCourseStudents(sessionCourse);
+                            } else {
+                              // Fallback if course not in full list
+                              loadCourseStudents({
+                                id: s.course_id || '',
+                                name: s.course_name,
+                                group_name: s.group_name
+                              } as Course);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${s.id === activeSession?.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                              <Clock size={20} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{s.course_name}</p>
+                              <p className="text-xs text-slate-500 font-medium">Groupe {s.group_name} • {s.start_time}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-900">{s.course_name}</p>
-                            <p className="text-xs text-slate-500 font-medium">Groupe {s.group_name} • {s.start_time}</p>
+                          <div className="flex items-center gap-3">
+                            {s.id === activeSession?.id ? (
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> EN COURS
+                              </span>
+                            ) : s.status === 'closed' ? (
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-full">
+                                <CheckCircle2 size={12} /> TERMINÉ
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  sendCommand('FORCE_START_SESSION', { session_id: s.id });
+                                }}
+                                className="p-2 text-blue-500 hover:bg-blue-100 rounded-xl transition-all relative z-10"
+                                title="Lancer maintenant"
+                              >
+                                <PlayCircle size={20} />
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {s.id === activeSession?.id ? (
-                            <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse">
-                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> EN COURS
-                            </span>
-                          ) : s.status === 'closed' ? (
-                            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-full">
-                              <CheckCircle2 size={12} /> TERMINÉ
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => sendCommand('FORCE_START_SESSION', { session_id: s.id })}
-                              className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
-                              title="Lancer maintenant"
-                            >
-                              <PlayCircle size={20} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )
                 ) : activeTab === 'alerts' ? (
                   absenceAlerts.length === 0 ? (
@@ -763,9 +900,20 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                         </p>
                       </div>
                       {absenceAlerts.map(a => (
-                        <div key={a.id} className="p-6 flex items-start gap-4 hover:bg-red-50/30 transition-colors border-l-4 border-red-500 bg-white">
+                        <div
+                          key={a.id}
+                          className="p-6 flex items-start gap-4 hover:bg-red-50/30 transition-colors border-l-4 border-red-500 bg-white cursor-pointer group"
+                          onClick={() => {
+                            const course = allCourses.find(c => c.name === a.course_name);
+                            if (course) loadCourseStudents(course);
+                            else loadCourseStudents({
+                              id: a.course_id || '',
+                              name: a.course_name
+                            } as Course);
+                          }}
+                        >
                           <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
-                            <img src={getPhotoUrl(a.student_photo)} alt="" className="w-full h-full object-cover" />
+                            <img src={getPhotoUrl(a.student_photo) || undefined} alt="" className="w-full h-full object-cover" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
@@ -857,18 +1005,24 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
       </div>
       {/* Student List Modal */}
       {selectedCourse && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300"
+          onClick={() => setSelectedCourse(null)}
+        >
+          <div
+            className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-8 border-b flex items-center justify-between bg-slate-50">
               <div>
                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
                   {selectedCourse.name}
                 </h3>
                 <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
-                  Liste des étudiants inscrits (G{selectedCourse.group_name})
+                  Liste des étudiants inscrits {selectedCourse.group_name && `(G${selectedCourse.group_name})`}
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedCourse(null)}
                 className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors shadow-sm"
               >
@@ -882,52 +1036,93 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                   <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Calcul de la liste IA...</p>
                 </div>
-              ) : courseStudents.length === 0 ? (
-                <div className="text-center py-20 space-y-4">
-                  <Users size={48} className="mx-auto text-slate-200" />
-                  <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Aucun étudiant trouvé pour ce cours</p>
-                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {courseStudents.map((s) => (
-                    <div key={s.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-4 hover:border-blue-300 transition-all group">
-                      <div className="w-12 h-12 rounded-xl border-2 border-white shadow-sm overflow-hidden bg-white">
-                        <img 
-                          src={getPhotoUrl(s.photo_url) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.full_name)}&background=3b82f6&color=fff`} 
-                          alt={s.full_name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-800 truncate">{s.full_name}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
-                          <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
-                            s.absence_count >= (s.absence_threshold || 5) ? 'bg-red-100 text-red-600 animate-pulse' :
-                            s.absence_count >= (s.absence_threshold || 5) - 1 ? 'bg-amber-100 text-amber-600' :
-                            'bg-emerald-100 text-emerald-600'
-                          }`}>
-                            {s.absence_count >= (s.absence_threshold || 5) ? 'CRITICAL' : 
-                             s.absence_count >= (s.absence_threshold || 5) - 1 ? 'WARNING' : 'SAFE'}
-                          </span>
+                  {courseStudents
+                    .filter((s) => {
+                      if (!selectedCourse.group_name || selectedCourse.group_name === 'ALL') return true;
+                      const courseGroup = String(selectedCourse.group_name).replace(/^0+/, '');
+                      const studentGroup = String(s.group_name || s.group || '').replace(/^0+/, '');
+                      return courseGroup === studentGroup;
+                    })
+                    .map((s) => (
+                      <div key={s.id} className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col hover:border-blue-300 transition-all group">
+                        <div className="p-4 flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl border-2 border-white shadow-sm overflow-hidden bg-white shrink-0">
+                            <img
+                              src={getPhotoUrl(s.photo_url) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.full_name)}&background=3b82f6&color=fff`}
+                              alt={s.full_name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-800 truncate">{s.full_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{s.student_code}</p>
+                              <span className="text-[8px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-black uppercase">
+                                GRP {s.group_name || s.group || 'N/A'}
+                              </span>
+                              <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${s.absence_count >= (s.absence_threshold || 5) ? 'bg-red-100 text-red-600 animate-pulse' :
+                                s.absence_count >= (s.absence_threshold || 5) - 1 ? 'bg-amber-100 text-amber-600' :
+                                  'bg-emerald-100 text-emerald-600'
+                                }`}>
+                                {s.absence_count >= (s.absence_threshold || 5) ? 'CRITICAL' :
+                                  s.absence_count >= (s.absence_threshold || 5) - 1 ? 'WARNING' : 'SAFE'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-xs font-black ${s.absence_count >= (s.absence_threshold || 5) ? 'text-red-500' : 'text-slate-800'}`}>
+                              {s.absence_count}/{s.absence_threshold || 5}
+                            </p>
+                            <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Absences</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 border-t border-slate-200 p-2 bg-white rounded-b-2xl">
+                          <button
+                            onClick={() => markCourseAttendance(s.id, 'present')}
+                            className={`flex-1 py-1.5 rounded text-[10px] font-bold uppercase transition-all ${localCourseAttendance[s.id] === 'present' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600'
+                              }`}
+                          >
+                            Présent
+                          </button>
+                          <button
+                            onClick={() => markCourseAttendance(s.id, 'absent')}
+                            className={`flex-1 py-1.5 rounded text-[10px] font-bold uppercase transition-all ${localCourseAttendance[s.id] === 'absent' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600'
+                              }`}
+                          >
+                            Absent
+                          </button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-xs font-black ${s.absence_count >= (s.absence_threshold || 5) ? 'text-red-500' : 'text-slate-800'}`}>
-                          {s.absence_count}/{s.absence_threshold || 5}
-                        </p>
-                        <p className="text-[8px] text-slate-400 font-bold uppercase">Absences</p>
+                    ))}
+                  {courseStudents.filter((s) => {
+                    if (!selectedCourse.group_name || selectedCourse.group_name === 'ALL') return true;
+                    const courseGroup = String(selectedCourse.group_name).replace(/^0+/, '');
+                    const studentGroup = String(s.group_name || s.group || '').replace(/^0+/, '');
+                    return courseGroup === studentGroup;
+                  }).length === 0 && (
+                      <div className="col-span-full text-center py-20 space-y-4">
+                        <Users size={48} className="mx-auto text-slate-200" />
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Aucun étudiant trouvé pour ce groupe</p>
                       </div>
-                    </div>
-                  ))}
+                    )}
                 </div>
               )}
             </div>
 
             <div className="p-6 border-t bg-slate-50 flex items-center justify-between text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
-              <span>Total : {courseStudents.length} Étudiants</span>
+              <span>
+                Affichage : {courseStudents.filter((s) => {
+                  if (!selectedCourse.group_name || selectedCourse.group_name === 'ALL') return true;
+                  const courseGroup = String(selectedCourse.group_name).replace(/^0+/, '');
+                  const studentGroup = String(s.group_name || s.group || '').replace(/^0+/, '');
+                  return courseGroup === studentGroup;
+                }).length} / {courseStudents.length} Étudiants
+              </span>
               <span>FaceAttend AI Matrix Active</span>
             </div>
+
           </div>
         </div>
       )}

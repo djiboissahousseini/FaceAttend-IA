@@ -71,7 +71,7 @@ export default function Attendance() {
     return localStorage.getItem('faceattend_camera_classroom') || 'Salle B1';
   });
   const [activeSession, setActiveSession] = useState<Session | null>(null);
-  
+
   const [livenessEnabled, setLivenessEnabled] = useState(true);
   const [autoTracking, setAutoTracking] = useState(true);
 
@@ -288,7 +288,7 @@ export default function Attendance() {
 
   async function createSession(launch = false) {
     if (!sessionForm.teacher_id || !sessionForm.course_name || !sessionForm.group_name) return;
-    
+
     // Conflict detection
     if (launch) {
       const existingActive = sessions.find(s => s.classroom === sessionForm.classroom && s.status === 'active');
@@ -302,13 +302,13 @@ export default function Attendance() {
     }
 
     try {
-      const sessionData = { 
-        ...sessionForm, 
+      const sessionData = {
+        ...sessionForm,
         teacher_id: Number(sessionForm.teacher_id),
         status: launch ? 'active' : 'scheduled',
         is_active: launch
       };
-      
+
       const res = await fetch(`${API}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -317,7 +317,7 @@ export default function Attendance() {
       if (!res.ok) return;
       const data = await readJsonSafe<{ id?: number }>(res);
       await fetchSessions();
-      
+
       if (typeof data?.id === 'number') {
         loadSession(data.id);
         if (launch) {
@@ -406,9 +406,9 @@ export default function Attendance() {
 
   const today = new Date().toISOString().split('T')[0];
   const anticipateSessions = sessions.filter(
-    (s) => 
-      s.status !== 'active' && 
-      s.status !== 'closed' && 
+    (s) =>
+      s.status !== 'active' &&
+      s.status !== 'closed' &&
       s.status !== 'cancelled' &&
       s.session_date === today
   );
@@ -592,12 +592,12 @@ export default function Attendance() {
                       await fetch(`${API}/api/sessions/${selectedAnticipateSession}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
+                        body: JSON.stringify({
                           status: 'active',
                           classroom: activeClassroom // On force la salle actuelle !
                         }),
                       });
-                      
+
                       if (needsRoomUpdate) {
                         alert(`Redirection : Le cours a été déplacé de ${session.classroom} vers ${activeClassroom}`);
                       }
@@ -644,7 +644,7 @@ export default function Attendance() {
               <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 mb-6 relative overflow-hidden group/card shadow-2xl">
                 {/* Background Decoration */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-3xl" />
-                
+
                 <div className="flex justify-between items-center mb-4 relative z-10">
                   <p className="text-blue-400 text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                     <span className="relative flex h-2 w-2">
@@ -661,7 +661,7 @@ export default function Attendance() {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="flex justify-between items-start mb-5 relative z-10">
                   <div className="flex-1">
                     <h4 className="text-xl font-black text-white leading-tight mb-1">{activeSession.course_name}</h4>
@@ -683,14 +683,18 @@ export default function Attendance() {
                     <p className="text-xs font-bold text-slate-200">{new Date(activeSession.session_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
                   </div>
                 </div>
-                
+
                 <div className="flex gap-2 relative z-10">
                   <button
-                    onClick={() => cancelActiveSession(activeSession.id)}
+                    onClick={() => {
+                      if (confirm("Voulez-vous clôturer cette session ? Tous les étudiants non scannés seront marqués absents.")) {
+                        cancelActiveSession(activeSession.id);
+                      }
+                    }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-[9px] font-black uppercase tracking-[0.1em] transition-all"
                   >
                     <XCircle size={14} />
-                    Arrêter le cours
+                    Clôturer la session
                   </button>
                   <button
                     onClick={() => loadSession(activeSession.id)}
@@ -719,15 +723,19 @@ export default function Attendance() {
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
                 >
                   <Unlock size={20} className="text-emerald-400" />
-                  <span className="text-xs font-medium text-center">Ouvrir session</span>
+                  <span className="text-xs font-medium text-center">Réveiller / Déverrouiller</span>
                 </button>
 
                 <button
-                  onClick={() => sendCommand('FORCE_STANDBY', { session_id: activeSession?.id })}
+                  onClick={() => {
+                    if (confirm("Voulez-vous mettre le terminal en veille ? La caméra s'éteindra mais la session (si active) ne sera pas clôturée dans la base de données.")) {
+                      sendCommand('FORCE_STANDBY');
+                    }
+                  }}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all"
                 >
                   <PowerOff size={20} className="text-red-400" />
-                  <span className="text-xs font-medium text-center">Fermer session</span>
+                  <span className="text-xs font-medium text-center">Mise en veille Terminal</span>
                 </button>
 
                 <button
@@ -748,11 +756,10 @@ export default function Attendance() {
 
                 <button
                   onClick={toggleLiveness}
-                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${
-                    livenessEnabled
+                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${livenessEnabled
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                       : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   <ShieldAlert size={20} className={livenessEnabled ? 'text-emerald-400' : 'text-slate-400'} />
                   <span className="text-xs font-medium text-center">Anti-Spoofing {livenessEnabled ? 'Actif' : 'Inactif'}</span>
@@ -760,11 +767,10 @@ export default function Attendance() {
 
                 <button
                   onClick={toggleAutoTracking}
-                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${
-                    autoTracking
+                  className={`border p-3 rounded-xl flex flex-col items-center justify-center gap-2 transition-all ${autoTracking
                       ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
                       : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   <Cpu size={20} className={autoTracking ? 'text-blue-400' : 'text-slate-400'} />
                   <span className="text-xs font-medium text-center">Suivi IA {autoTracking ? 'Actif' : 'Inactif'}</span>
@@ -782,22 +788,20 @@ export default function Attendance() {
           <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
             <button
               onClick={() => setActiveTab('live')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'live'
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'live'
                   ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
-              }`}
+                }`}
             >
               <Video size={14} />
               Surveillance & Direct
             </button>
             <button
               onClick={() => setActiveTab('master')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'master'
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'master'
                   ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
-              }`}
+                }`}
             >
               <CalendarDays size={14} />
               Planning Global
@@ -815,12 +819,11 @@ export default function Attendance() {
                   sessions
                     .filter(s => s.status === 'active' && s.classroom === activeClassroom)
                     .map(s => (
-                      <button 
+                      <button
                         key={s.id}
                         onClick={() => loadSession(Number(s.id))}
-                        className={`w-full text-left bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden group transition-all ${
-                          selectedSessionId === Number(s.id) ? 'ring-4 ring-emerald-300 ring-offset-2' : 'hover:scale-[1.02]'
-                        }`}
+                        className={`w-full text-left bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-200 relative overflow-hidden group transition-all ${selectedSessionId === Number(s.id) ? 'ring-4 ring-emerald-300 ring-offset-2' : 'hover:scale-[1.02]'
+                          }`}
                       >
                         <div className="relative z-10">
                           <div className="flex justify-between items-start mb-4">
@@ -828,7 +831,7 @@ export default function Attendance() {
                               <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
                               <span className="text-[10px] font-black uppercase">EN COURS D'ENREGISTREMENT</span>
                             </div>
-                            <div 
+                            <div
                               onClick={(e) => {
                                 e.stopPropagation();
                                 cancelActiveSession(s.id);
@@ -839,7 +842,7 @@ export default function Attendance() {
                               <PowerOff size={18} className="group-hover/btn:scale-110 transition-transform" />
                             </div>
                           </div>
-                          
+
                           <h4 className="text-xl font-black mb-1">{s.course_name}</h4>
                           <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-4">
                             PROF: {s.teacher_name} • GRP {s.group_name}
@@ -863,7 +866,7 @@ export default function Attendance() {
                   <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center">
                     <MonitorPlay size={32} className="mx-auto text-slate-300 mb-3 opacity-50" />
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                      Aucune session active sur la caméra.<br/>L'IA lancera automatiquement le prochain cours prévu.
+                      Aucune session active sur la caméra.<br />L'IA lancera automatiquement le prochain cours prévu.
                     </p>
                   </div>
                 )}
@@ -879,8 +882,8 @@ export default function Attendance() {
 
             {activeTab === 'live' ? (
               sessions
-                .filter((s) => 
-                  s.classroom === activeClassroom && 
+                .filter((s) =>
+                  s.classroom === activeClassroom &&
                   s.status !== 'active' &&
                   (s.session_date === new Date().toISOString().split('T')[0])
                 )
@@ -894,13 +897,12 @@ export default function Attendance() {
                 .map((s) => (
                   <div
                     key={s.id}
-                    className={`group relative p-4 rounded-2xl border-2 transition-all ${
-                      selectedSessionId === Number(s.id)
+                    className={`group relative p-4 rounded-2xl border-2 transition-all ${selectedSessionId === Number(s.id)
                         ? 'border-blue-500 bg-blue-50'
                         : s.status === 'closed'
                           ? 'border-slate-100 bg-slate-50 opacity-60'
                           : 'border-slate-50 hover:border-slate-200 bg-white'
-                    }`}
+                      }`}
                   >
                     <button
                       onClick={() => loadSession(Number(s.id))}
@@ -955,7 +957,7 @@ export default function Attendance() {
                           <Play size={14} />
                         </button>
                       )}
-                      
+
                       {s.status === 'active' && (
                         <button
                           onClick={() => cancelActiveSession(s.id)}
@@ -999,10 +1001,10 @@ export default function Attendance() {
                 const todayName = days[new Date().getDay()];
                 const roomCourses = courses.filter((c) => c.room === activeClassroom);
                 const todayCourses = roomCourses.filter((c) => c.schedule_day?.toUpperCase() === todayName);
-                
+
                 // Show today's courses if available, otherwise show all room courses as fallback
                 const coursesToDisplay = todayCourses.length > 0 ? todayCourses : roomCourses;
-                
+
                 if (coursesToDisplay.length === 0) {
                   return (
                     <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8 opacity-50">
@@ -1016,11 +1018,10 @@ export default function Attendance() {
                   <button
                     key={c.id}
                     onClick={() => loadCourseStudents(c)}
-                    className={`p-4 rounded-2xl border transition-all text-left w-full ${
-                      selectedCourse?.id === c.id
+                    className={`p-4 rounded-2xl border transition-all text-left w-full ${selectedCourse?.id === c.id
                         ? 'border-indigo-500 bg-indigo-50 shadow-md'
                         : 'border-slate-100 bg-white hover:border-indigo-200'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start mb-3">
                       <p className="font-bold text-slate-800 text-sm leading-tight">{c.name}</p>
@@ -1057,12 +1058,12 @@ export default function Attendance() {
                 ));
               })()
             )}
-            
+
             {activeTab === 'live' && sessions.filter(s => s.classroom === activeClassroom).length === 0 && (
-               <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8">
-                  <Video size={32} className="mb-2 opacity-20" />
-                  <p className="text-xs">Aucune session enregistrée pour cette salle aujourd'hui.</p>
-               </div>
+              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8">
+                <Video size={32} className="mb-2 opacity-20" />
+                <p className="text-xs">Aucune session enregistrée pour cette salle aujourd'hui.</p>
+              </div>
             )}
           </div>
         </div>
@@ -1137,11 +1138,10 @@ export default function Attendance() {
                         {groupStudents.map((student) => (
                           <div
                             key={student.id}
-                            className={`p-4 rounded-3xl border transition-all group/card relative overflow-hidden ${
-                              student.status === 'present'
+                            className={`p-4 rounded-3xl border transition-all group/card relative overflow-hidden ${student.status === 'present'
                                 ? 'bg-emerald-50/30 border-emerald-100'
                                 : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-3 relative z-10">
                               <div className="relative">
@@ -1151,9 +1151,8 @@ export default function Attendance() {
                                     `https://ui-avatars.com/api/?name=${encodeURIComponent(student.full_name)}&background=f1f5f9&color=64748b`
                                   }
                                   alt={student.full_name}
-                                  className={`w-12 h-12 rounded-2xl object-cover border-2 transition-all ${
-                                    student.status === 'present' ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-white'
-                                  }`}
+                                  className={`w-12 h-12 rounded-2xl object-cover border-2 transition-all ${student.status === 'present' ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-white'
+                                    }`}
                                 />
                                 {student.status === 'present' && (
                                   <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white">
@@ -1173,21 +1172,19 @@ export default function Attendance() {
                             <div className="flex gap-2 mt-4 relative z-10">
                               <button
                                 onClick={() => markAttendance(student.id, 'present')}
-                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${
-                                  student.status === 'present'
+                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${student.status === 'present'
                                     ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                                     : 'bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'
-                                }`}
+                                  }`}
                               >
                                 Présent
                               </button>
                               <button
                                 onClick={() => markAttendance(student.id, 'absent')}
-                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${
-                                  student.status === 'absent'
+                                className={`flex-1 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${student.status === 'absent'
                                     ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
                                     : 'bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600'
-                                }`}
+                                  }`}
                               >
                                 Absent
                               </button>

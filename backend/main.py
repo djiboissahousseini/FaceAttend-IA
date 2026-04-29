@@ -1271,9 +1271,14 @@ def get_session_attendance(session_id: str, db: Session = Depends(get_db)):
 
         norm_group = normalize_group(group_name)
         
-        # 1. Get course_id for enrollment check - Use ILIKE for fuzzy matching
-        course_id_query = text("SELECT id FROM courses WHERE :cname ILIKE '%' || name || '%' OR name ILIKE '%' || :cname || '%' LIMIT 1")
-        course_id_row = db.execute(course_id_query, {"cname": course_name}).fetchone()
+        # 1. Get course_id for enrollment check - Use ILIKE for fuzzy matching and match the group
+        course_id_query = text("""
+            SELECT id FROM courses 
+            WHERE (:cname ILIKE '%' || name || '%' OR name ILIKE '%' || :cname || '%')
+            AND (LTRIM(TRIM(UPPER(REPLACE(REPLACE(group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group OR :norm_group = '')
+            LIMIT 1
+        """)
+        course_id_row = db.execute(course_id_query, {"cname": course_name, "norm_group": norm_group}).fetchone()
         cid = course_id_row[0] if course_id_row else None
         
         # 2. Robust combined query
@@ -1406,7 +1411,7 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
                 MAX(aa.status) as alert_status
             FROM students s
             LEFT JOIN attendance_records ar ON s.id = ar.student_id 
-                AND ar.session_id IN (SELECT id FROM sessions WHERE course_name = :cname)
+                AND ar.session_id IN (SELECT id FROM sessions WHERE course_name = :cname AND group_name = :gname)
             LEFT JOIN absence_alerts aa ON s.id = aa.student_id AND aa.course_id = :cid
             WHERE s.id IN ({sids_str})
             GROUP BY s.id
@@ -1415,6 +1420,7 @@ def get_course_students(course_id: str, db: Session = Depends(get_db)):
             
         stats_result = db.execute(final_query, {
             "cname": course_row[1],
+            "gname": course_row[2],
             "cid": course_id
         }).fetchall()
 
@@ -1467,11 +1473,86 @@ def get_teacher_alerts(teacher_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def auto_mark_absents(session_id: int, db: Session):
+    try:
+        session_row = db.execute(text("SELECT course_name, group_name FROM sessions WHERE id = :sid"), {"sid": session_id}).fetchone()
+        if not session_row: return
+        course_name, group_name = session_row
+        
+        def normalize_group(g):
+            if not g: return ""
+            g = g.upper().replace("GRP", "").replace("G", "").strip()
+            return g.lstrip('0') or "0"
+
+        norm_group = normalize_group(group_name)
+        
+        course_id_query = text("""
+            SELECT id FROM courses 
+            WHERE (:cname ILIKE '%' || name || '%' OR name ILIKE '%' || :cname || '%')
+            AND (LTRIM(TRIM(UPPER(REPLACE(REPLACE(group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group OR :norm_group = '')
+            LIMIT 1
+        """)
+        course_id_row = db.execute(course_id_query, {"cname": course_name, "norm_group": norm_group}).fetchone()
+        cid = course_id_row[0] if course_id_row else None
+        
+        if group_name == 'ALL':
+            students_query = text("SELECT id FROM students")
+            students_result = db.execute(students_query).fetchall()
+        else:
+            students_query = text("""
+                SELECT DISTINCT s.id 
+                FROM students s
+                LEFT JOIN course_enrollments ce ON s.id = ce.student_id AND ce.course_id = :cid
+                WHERE ce.course_id IS NOT NULL 
+                   OR LTRIM(TRIM(UPPER(REPLACE(REPLACE(s.group_name, 'GRP', ''), 'G', ''))), '0') = :norm_group
+                   OR (s.group_name IS NULL AND :norm_group = '')
+            """)
+            students_result = db.execute(students_query, {"cid": cid, "norm_group": norm_group}).fetchall()
+
+        if not students_result: return
+
+        # Obtenir les étudiants déjà marqués
+        records_query = text("SELECT student_id FROM attendance_records WHERE session_id = :sid")
+        records_result = db.execute(records_query, {"sid": session_id}).fetchall()
+        marked_students = {str(r[0]) for r in records_result}
+
+        absents_to_mark = []
+        for s in students_result:
+            s_id = str(s[0])
+            if s_id not in marked_students:
+                absents_to_mark.append(s_id)
+                
+        if absents_to_mark:
+            insert_query = text("""
+                INSERT INTO attendance_records (session_id, student_id, status, method)
+                VALUES (:sid, CAST(:stid AS uuid), 'absent', 'auto')
+                ON CONFLICT (session_id, student_id) DO NOTHING
+            """)
+            for s_id in absents_to_mark:
+                db.execute(insert_query, {"sid": session_id, "stid": s_id})
+            db.commit()
+            
+            # Synchroniser les alertes d'absence
+            for s_id in absents_to_mark:
+                try:
+                    sync_student_alerts(s_id, session_id, db)
+                except Exception as e:
+                    print(f"Error syncing alert for {s_id}: {e}")
+                    
+    except Exception as e:
+        print(f"Auto-mark absents error: {e}")
+
 @app.patch("/api/sessions/{session_id}")
 def update_session(session_id: int, session: SessionUpdate, db: Session = Depends(get_db)):
     try:
         # is_active=False pour fermer la session (status 'closed')
         is_active = session.status not in ('closed', 'cancelled', 'inactive')
+        
+        # Check if we are closing an active session
+        if session.status == 'closed':
+            # Call our AI algorithm to mark all unscanned students as absent
+            auto_mark_absents(session_id, db)
+            
         query = text("""
             UPDATE sessions
             SET is_active = :is_active,

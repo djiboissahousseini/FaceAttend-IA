@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "cam": "bash ./scripts/camera.sh connect",
+    "phone": "bash ./scripts/connect_phones.sh"
   },
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",
