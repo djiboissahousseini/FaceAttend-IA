@@ -597,6 +597,7 @@ export default function Courses() {
                     <option value="02">Groupe 02</option>
                     <option value="03">Groupe 03</option>
                     <option value="04">Groupe 04</option>
+                    <option value="demo 01">Groupe Demo 01</option>
                   </select>
                 </div>
                 <div>

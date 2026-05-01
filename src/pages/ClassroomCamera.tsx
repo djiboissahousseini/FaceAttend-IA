@@ -75,6 +75,7 @@ export default function ClassroomCamera() {
 
   // ─── FACE TRACKING (face-api.js) ───────────────────────
   const faceReticleRef = useRef<HTMLDivElement>(null);
+  const earHistoryRef = useRef<number[]>([]);
   const [isIAReady, setIsIAReady] = useState(false);
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export default function ClassroomCamera() {
         // Use absolute URL to ensure correct resolution
         const modelUrl = `${window.location.origin}/models`;
         await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
         console.log('[FaceTracker] ✅ Modèles chargés avec succès !');
         if (isMounted) setIsIAReady(true);
       } catch (err) {
@@ -100,8 +102,8 @@ export default function ClassroomCamera() {
     let isMounted = true;
 
     const runDetection = async () => {
-      // The tracker should ONLY run when actively preparing or performing a scan
-      const isActivelyScanning = ['holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status);
+      // The tracker should run during ready state to show the reticle, and during scanning
+      const isActivelyScanning = ['ready', 'ready_teacher', 'holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status);
 
       if (!isMounted || !isIAReady || !isActivelyScanning || status === 'paused') {
         if (faceReticleRef.current) {
@@ -116,14 +118,34 @@ export default function ClassroomCamera() {
         const video = webcamRef.current.video;
         if (video.readyState === 4 && video.videoWidth > 0) {
           try {
-            const detections = await faceapi.detectAllFaces(
-              video,
-              new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.1 })
-            );
+            let detections;
+            // On calcule les landmarks (mouvement des yeux) UNIQUEMENT pendant la capture pour garder le rectangle fluide
+            if (status === 'holding' || status === 'holding_teacher') {
+              detections = await faceapi.detectAllFaces(
+                video,
+                new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.1 })
+              ).withFaceLandmarks();
+            } else {
+              detections = await faceapi.detectAllFaces(
+                video,
+                new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.1 })
+              );
+            }
 
             if (isMounted && faceReticleRef.current) {
               if (detections.length > 0) {
-                const { x, y, width, height } = detections[0].box;
+                // Compatibilité : si on a des landmarks, la box est dans detection.box, sinon directement dans box
+                const box = detections[0].detection ? detections[0].detection.box : detections[0].box;
+                const { x, y, width, height } = box;
+                
+                // Calcul EAR (Eye Aspect Ratio) pour anti-spoofing pendant la capture
+                if ((status === 'holding' || status === 'holding_teacher') && detections[0].landmarks) {
+                  const leftEye = detections[0].landmarks.getLeftEye();
+                  const dist = (p1: any, p2: any) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+                  const ear = (dist(leftEye[1], leftEye[5]) + dist(leftEye[2], leftEye[4])) / (2.0 * dist(leftEye[0], leftEye[3]));
+                  earHistoryRef.current.push(ear);
+                }
+
                 // Direct DOM update for maximum performance
                 faceReticleRef.current.style.opacity = '1';
                 faceReticleRef.current.style.left = `${(x / video.videoWidth) * 100}%`;
@@ -145,7 +167,7 @@ export default function ClassroomCamera() {
       }
 
       if (isMounted) {
-        timeoutId = setTimeout(runDetection, 40); // 25 FPS detection for super-smooth tracking
+        timeoutId = setTimeout(runDetection, 60); // 15-20 FPS with landmarks
       }
     };
 
@@ -422,6 +444,7 @@ export default function ClassroomCamera() {
     const currentStatus = status;
 
     if (currentStatus === 'holding' || currentStatus === 'holding_teacher') {
+      earHistoryRef.current = []; // Reset EAR history pour la nouvelle capture
       let initialized = false;
       setTimeout(() => {
         initialized = true;
@@ -433,6 +456,20 @@ export default function ClassroomCamera() {
         setProgress((p) => {
           if (p >= 100) {
             clearInterval(interval);
+            
+            // ─── LOCAL LIVENESS CHECK (Eye movement) ───
+            if (livenessEnabled && earHistoryRef.current.length > 5) {
+              const ears = earHistoryRef.current;
+              const maxEar = Math.max(...ears);
+              const minEar = Math.min(...ears);
+              // Une photo fixe aura une variance d'EAR presque nulle (< 0.01).
+              // De vrais yeux présentent des micro-mouvements ou des clignements (> 0.015).
+              if (maxEar - minEar < 0.015) {
+                handleResult('liveness_failed', { message: 'AUCUN MOUVEMENT OCULAIRE DÉTECTÉ' });
+                return 100;
+              }
+            }
+            
             captureAndScan(currentStatus === 'holding_teacher' ? 'teacher' : 'student');
             return 100;
           }
@@ -645,7 +682,7 @@ export default function ClassroomCamera() {
           {/* Cyberpunk/Futuristic Face Tracking HUD Overlay */}
           <div
             ref={faceReticleRef}
-            className={`absolute z-[60] transition-all duration-75 ease-linear flex flex-col items-center justify-center pointer-events-none ${['holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status) ? 'opacity-100 scale-100' : 'opacity-0 scale-110'
+            className={`absolute z-[60] transition-all duration-75 ease-linear flex flex-col items-center justify-center pointer-events-none ${['ready', 'ready_teacher', 'holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status) ? 'opacity-100 scale-100' : 'opacity-0 scale-110'
               }`}
             style={{
               boxShadow: `inset 0 0 30px ${themeColor}40`,

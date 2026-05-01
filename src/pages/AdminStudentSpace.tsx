@@ -23,6 +23,7 @@ export default function AdminStudentSpace() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,11 +67,15 @@ export default function AdminStudentSpace() {
 
   const currentStudent = students.find((s) => s.id === selectedStudentId);
 
-  const filteredStudents = students.filter(
-    (s) =>
+  const groups = Array.from(new Set(students.map((s) => s.group_name || 'Sans Groupe'))).sort();
+
+  const filteredStudents = students.filter((s) => {
+    const matchesSearch =
       s.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.student_code.toLowerCase().includes(search.toLowerCase())
-  );
+      s.student_code.toLowerCase().includes(search.toLowerCase());
+    const matchesGroup = selectedGroup === null || (s.group_name || 'Sans Groupe') === selectedGroup;
+    return matchesSearch && matchesGroup;
+  });
 
   if (selectedStudentId && currentStudent) {
     return (
@@ -404,6 +409,32 @@ export default function AdminStudentSpace() {
             className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-medium"
           />
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedGroup(null)}
+          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+            selectedGroup === null
+              ? 'bg-slate-900 text-white shadow-md'
+              : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400 hover:text-slate-800'
+          }`}
+        >
+          Tous les groupes
+        </button>
+        {groups.map((group) => (
+          <button
+            key={group}
+            onClick={() => setSelectedGroup(group)}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              selectedGroup === group
+                ? 'bg-emerald-500 text-white shadow-md'
+                : 'bg-white text-slate-500 border border-slate-200 hover:border-emerald-500 hover:text-emerald-600'
+            }`}
+          >
+            {group === 'Sans Groupe' ? 'Sans Groupe' : `Groupe ${group}`}
+          </button>
+        ))}
       </div>
 
       {loading ? (

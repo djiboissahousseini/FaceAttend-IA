@@ -1774,25 +1774,42 @@ def check_liveness(image_path: str) -> bool:
     
     # Measure energy in the high frequency bands (excluding the DC component)
     crow, ccol = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
-    # Mask the center
-    magnitude_spectrum[crow-10:crow+10, ccol-10:ccol+10] = 0
+    # Mask the center (DC component and low frequencies)
+    magnitude_spectrum[crow-15:crow+15, ccol-15:ccol+15] = 0
     high_freq_energy = np.mean(magnitude_spectrum)
     
-    # 3. Detection Logic
+    # 3. Phone Bezel / Screen Edge Detection (Structural condition)
+    # Phones introduce strong, unnatural straight lines (the edges of the device)
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
+    
+    strong_phone_edges = 0
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            angle = np.abs(np.arctan2(y2-y1, x2-x1) * 180.0 / np.pi)
+            # Count near-vertical and near-horizontal strong lines (typical phone frame)
+            if (angle < 10 or angle > 170) or (80 < angle < 100):
+                strong_phone_edges += 1
+    
+    # 4. Detection Logic
     is_live = True
     reason = "Real"
     
-    # Low sharpness detection
-    if laplacian_var < 30.0: # Increased threshold from 15.0
+    # Low sharpness detection (blurry / printout)
+    if laplacian_var < 15.0:
         is_live = False
         reason = f"Blurry/LowRes (Var: {laplacian_var:.1f})"
     
-    # Screen detection via FFT energy
-    # Heuristic: photos of screens tend to have much higher high-freq energy
-    # due to the pixel grid / moiré patterns.
-    if high_freq_energy > 100.0: 
+    # Strict Screen detection via FFT energy (Moiré pattern of the screen pixels)
+    elif high_freq_energy > 95.0: 
         is_live = False
-        reason = f"Screen detected (Energy: {high_freq_energy:.1f})"
+        reason = f"Screen Moiré detected (Energy: {high_freq_energy:.1f})"
+        
+    # Structural Phone Frame Detection (Phone edges visible + moderate screen noise)
+    elif strong_phone_edges >= 2 and high_freq_energy > 80.0:
+        is_live = False
+        reason = f"Phone Frame Detected (Edges: {strong_phone_edges})"
         
     print(f"LIVENESS: {'PASSED' if is_live else 'FAILED'} | {reason}")
     return is_live

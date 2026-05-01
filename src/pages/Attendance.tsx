@@ -522,12 +522,9 @@ export default function Attendance() {
               <select
                 value={sessionForm.course_name}
                 onChange={(e) => {
-                  const course = courses.find((c) => c.name === e.target.value);
                   setSessionForm({
                     ...sessionForm,
-                    course_name: e.target.value,
-                    teacher_id: course ? String(teachers.find(t => t.name === course.teacher_name)?.id || '') : sessionForm.teacher_id,
-                    group_name: course ? course.group_name : sessionForm.group_name
+                    course_name: e.target.value
                   });
                 }}
                 className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none"
@@ -550,6 +547,7 @@ export default function Attendance() {
                 <option value="02">Groupe 02</option>
                 <option value="03">Groupe 03</option>
                 <option value="04">Groupe 04</option>
+                <option value="demo 01">Groupe Demo 01</option>
               </select>
 
               <input
@@ -1015,23 +1013,6 @@ export default function Attendance() {
                           title="Arrêter la session"
                         >
                           <XCircle size={14} />
-                        </button>
-                      )}
-
-                      {s.status === 'closed' && (
-                        <button
-                          onClick={async () => {
-                            await fetch(`${API}/api/sessions/${s.id}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'active', is_active: true }),
-                            });
-                            fetchSessions();
-                          }}
-                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors shadow-sm"
-                          title="Rétablir la session"
-                        >
-                          <RefreshCw size={14} />
                         </button>
                       )}
 
