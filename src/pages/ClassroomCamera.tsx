@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
+import * as faceapi from '@vladmandic/face-api';
 import {
   ShieldAlert,
   UserCheck,
@@ -36,6 +37,7 @@ const API = API_URL;
 
 export default function ClassroomCamera() {
   const webcamRef = useRef<Webcam>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<ScanStatus>('standby');
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ name?: string; message?: string } | null>(null);
@@ -51,11 +53,108 @@ export default function ClassroomCamera() {
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
 
-  const [livenessEnabled, setLivenessEnabled] = useState(true);
-  const [autoTracking, setAutoTracking] = useState(true);
+  const [livenessEnabled, setLivenessEnabled] = useState(() => {
+    const saved = localStorage.getItem('faceattend_liveness_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [autoTracking, setAutoTracking] = useState(() => {
+    const saved = localStorage.getItem('faceattend_auto_tracking_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('faceattend_liveness_enabled', JSON.stringify(livenessEnabled));
+  }, [livenessEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('faceattend_auto_tracking_enabled', JSON.stringify(autoTracking));
+  }, [autoTracking]);
 
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
+
+  // ─── FACE TRACKING (face-api.js) ───────────────────────
+  const faceReticleRef = useRef<HTMLDivElement>(null);
+  const [isIAReady, setIsIAReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadModels = async () => {
+      try {
+        console.log('[FaceTracker] Chargement des modèles IA...');
+        // Use absolute URL to ensure correct resolution
+        const modelUrl = `${window.location.origin}/models`;
+        await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+        console.log('[FaceTracker] ✅ Modèles chargés avec succès !');
+        if (isMounted) setIsIAReady(true);
+      } catch (err) {
+        console.error('[FaceTracker] ❌ Erreur de chargement des modèles:', err);
+      }
+    };
+    loadModels();
+    return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+
+    const runDetection = async () => {
+      // The tracker should ONLY run when actively preparing or performing a scan
+      const isActivelyScanning = ['holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status);
+
+      if (!isMounted || !isIAReady || !isActivelyScanning || status === 'paused') {
+        if (faceReticleRef.current) {
+          faceReticleRef.current.style.opacity = '0';
+          faceReticleRef.current.style.pointerEvents = 'none';
+        }
+        if (isMounted) timeoutId = setTimeout(runDetection, 400);
+        return;
+      }
+
+      if (webcamRef.current && webcamRef.current.video) {
+        const video = webcamRef.current.video;
+        if (video.readyState === 4 && video.videoWidth > 0) {
+          try {
+            const detections = await faceapi.detectAllFaces(
+              video,
+              new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.1 })
+            );
+
+            if (isMounted && faceReticleRef.current) {
+              if (detections.length > 0) {
+                const { x, y, width, height } = detections[0].box;
+                // Direct DOM update for maximum performance
+                faceReticleRef.current.style.opacity = '1';
+                faceReticleRef.current.style.left = `${(x / video.videoWidth) * 100}%`;
+                faceReticleRef.current.style.top = `${(y / video.videoHeight) * 100}%`;
+                faceReticleRef.current.style.width = `${(width / video.videoWidth) * 100}%`;
+                faceReticleRef.current.style.height = `${(height / video.videoHeight) * 100}%`;
+              } else {
+                faceReticleRef.current.style.opacity = '0.3'; // Faint guide when scanning but no face
+                faceReticleRef.current.style.left = '37.5%';
+                faceReticleRef.current.style.top = '25%';
+                faceReticleRef.current.style.width = '25%';
+                faceReticleRef.current.style.height = '50%';
+              }
+            }
+          } catch (err) {
+            console.error("IA Detection error", err);
+          }
+        }
+      }
+
+      if (isMounted) {
+        timeoutId = setTimeout(runDetection, 40); // 25 FPS detection for super-smooth tracking
+      }
+    };
+
+    runDetection();
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [isIAReady, status]);
 
   const handleResult = (newStatus: ScanStatus, resData: { name?: string; message?: string }) => {
     setStatus(newStatus);
@@ -85,17 +184,17 @@ export default function ClassroomCamera() {
       speak(`Erreur système.`);
     }
 
-    setTimeout(() => {
-      if (newStatus === 'teacher_success') {
-        setStatus('ready');
-      } else if (newStatus === 'teacher_error') {
-        setStatus('ready_teacher');
-      } else {
+    // Auto-reset results after 4 seconds
+    if (
+      !['scanning', 'holding', 'scanning_teacher', 'holding_teacher', 'standby', 'paused'].includes(
+        newStatus
+      )
+    ) {
+      setTimeout(() => {
+        setResult(null);
         setStatus(isTeacherUnlocked ? 'ready' : 'ready_teacher');
-      }
-      setProgress(0);
-      setResult(null);
-    }, 3000);
+      }, 4000);
+    }
   };
 
   const captureAndScan = async (targetType: 'teacher' | 'student') => {
@@ -105,6 +204,7 @@ export default function ClassroomCamera() {
     }
 
     setStatus(targetType === 'teacher' ? 'scanning_teacher' : 'scanning');
+    playSound('scan');
     const image = webcamRef.current.getScreenshot();
     if (!image) {
       handleResult(targetType === 'teacher' ? 'teacher_error' : 'error', {
@@ -269,7 +369,7 @@ export default function ClassroomCamera() {
   // SAFE POLLING: Use a separate effect that doesn't depend on volatile state
   useEffect(() => {
     let isMounted = true;
-    
+
     const checkActiveSession = async () => {
       if (!autoTracking) return; // Suivi IA désactivé : on ne cherche pas de cours automatiquement
       try {
@@ -348,7 +448,7 @@ export default function ClassroomCamera() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  const playSound = (type: 'success' | 'error' | 'warning') => {
+  const playSound = (type: 'success' | 'error' | 'warning' | 'scan') => {
     try {
       const AudioContextClass =
         window.AudioContext ||
@@ -362,7 +462,15 @@ export default function ClassroomCamera() {
 
       const now = audioCtx.currentTime;
 
-      if (type === 'success') {
+      if (type === 'scan') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'success') {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(880, now); // La
         osc.frequency.exponentialRampToValueAtTime(1320, now + 0.1); // Mi
@@ -419,8 +527,16 @@ export default function ClassroomCamera() {
           0% { transform: translateY(-100vh); }
           100% { transform: translateY(100vh); }
         }
+        @keyframes scanY {
+          0%, 100% { top: 0%; opacity: 0; }
+          10%, 90% { opacity: 1; }
+          50% { top: 100%; opacity: 1; }
+        }
         .animate-global-scan {
           animation: globalScanline 8s linear infinite;
+        }
+        .animate-scan-y {
+          animation: scanY 2s ease-in-out infinite;
         }
       `}</style>
 
@@ -461,21 +577,19 @@ export default function ClassroomCamera() {
         {/* STATUS INDICATORS (TOP CENTER) */}
         <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
           <div
-            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${
-              livenessEnabled
-                ? 'border-[#00ff9d] text-[#00ff9d] bg-[#00ff9d]/10 shadow-[0_0_10px_rgba(0,255,157,0.3)]'
-                : 'border-red-500 text-red-500 bg-red-500/10'
-            }`}
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${livenessEnabled
+              ? 'border-[#00ff9d] text-[#00ff9d] bg-[#00ff9d]/10 shadow-[0_0_10px_rgba(0,255,157,0.3)]'
+              : 'border-red-500 text-red-500 bg-red-500/10'
+              }`}
           >
             <ShieldAlert size={10} />
             ANTI-SPOOFING: {livenessEnabled ? 'ON' : 'OFF'}
           </div>
           <div
-            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${
-              autoTracking
-                ? 'border-[#00f0ff] text-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
-                : 'border-slate-500 text-slate-500 bg-slate-800/50'
-            }`}
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${autoTracking
+              ? 'border-[#00f0ff] text-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+              : 'border-slate-500 text-slate-500 bg-slate-800/50'
+              }`}
           >
             <Activity size={10} />
             SUIVI IA: {autoTracking ? 'ON' : 'OFF'}
@@ -528,13 +642,55 @@ export default function ClassroomCamera() {
             />
           )}
 
+          {/* Cyberpunk/Futuristic Face Tracking HUD Overlay */}
+          <div
+            ref={faceReticleRef}
+            className={`absolute z-[60] transition-all duration-75 ease-linear flex flex-col items-center justify-center pointer-events-none ${['holding', 'scanning', 'holding_teacher', 'scanning_teacher'].includes(status) ? 'opacity-100 scale-100' : 'opacity-0 scale-110'
+              }`}
+            style={{
+              boxShadow: `inset 0 0 30px ${themeColor}40`,
+              backgroundColor: `${themeColor}10`
+            }}
+          >
+            {/* Inner Crosshairs */}
+            <div className={`absolute top-1/2 left-0 w-3 h-[1px] -translate-y-1/2 bg-current ${themeClass.split(' ')[0]} shadow-[0_0_5px_currentColor]`} />
+            <div className={`absolute top-1/2 right-0 w-3 h-[1px] -translate-y-1/2 bg-current ${themeClass.split(' ')[0]} shadow-[0_0_5px_currentColor]`} />
+            <div className={`absolute left-1/2 top-0 w-[1px] h-3 -translate-x-1/2 bg-current ${themeClass.split(' ')[0]} shadow-[0_0_5px_currentColor]`} />
+            <div className={`absolute left-1/2 bottom-0 w-[1px] h-3 -translate-x-1/2 bg-current ${themeClass.split(' ')[0]} shadow-[0_0_5px_currentColor]`} />
+
+            {/* Scanning Line Effect (Only during actual scanning) */}
+            {status.includes('scanning') && (
+              <div className={`absolute left-0 right-0 h-[2px] bg-current ${themeClass.split(' ')[0]} animate-scan-y shadow-[0_0_15px_currentColor]`} />
+            )}
+
+            {/* Corner Accents (Sci-Fi Style) */}
+            <div className={`absolute -top-1 -left-1 w-6 h-6 border-t-[3px] border-l-[3px] border-current ${themeClass.split(' ')[0]} shadow-[-2px_-2px_8px_currentColor]`} />
+            <div className={`absolute -top-1 -right-1 w-6 h-6 border-t-[3px] border-r-[3px] border-current ${themeClass.split(' ')[0]} shadow-[2px_-2px_8px_currentColor]`} />
+            <div className={`absolute -bottom-1 -left-1 w-6 h-6 border-b-[3px] border-l-[3px] border-current ${themeClass.split(' ')[0]} shadow-[-2px_2px_8px_currentColor]`} />
+            <div className={`absolute -bottom-1 -right-1 w-6 h-6 border-b-[3px] border-r-[3px] border-current ${themeClass.split(' ')[0]} shadow-[2px_2px_8px_currentColor]`} />
+
+            {/* Tactical Data Overlays (Hidden on very small screens to avoid clutter) */}
+            <div className={`absolute -right-16 top-1/2 -translate-y-1/2 text-[8px] font-mono leading-tight tracking-tighter ${themeClass.split(' ')[0]} opacity-80 hidden sm:block`}>
+              <div className="flex items-center gap-1"><span className="w-1 h-1 bg-current rounded-full animate-pulse" /> DIST: 0.82m</div>
+              <div className="flex items-center gap-1"><span className="w-1 h-1 bg-current rounded-full" /> CONF: 99.9%</div>
+              <div className="flex items-center gap-1"><span className="w-1 h-1 bg-current rounded-full" /> REC: OK</div>
+            </div>
+
+            {/* Status Label */}
+            {(status.includes('holding') || status.includes('scanning')) && (
+              <div className={`absolute -top-10 left-1/2 -translate-x-1/2 px-4 py-1 text-[10px] font-black tracking-[0.2em] uppercase whitespace-nowrap bg-[#020617]/80 border border-current backdrop-blur-md shadow-[0_0_15px_currentColor] ${themeClass.split(' ')[0]}`}>
+                {status.includes('scanning') ? 'IDENTIFICATION ....' : 'CIBLE ACQUISE'}
+              </div>
+            )}
+          </div>
+
           {status === 'standby' && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0f18]/90 backdrop-blur-xl overflow-hidden">
               {/* Animated Background Grids */}
-              <div className="absolute inset-0 opacity-20" 
-                   style={{backgroundImage: 'linear-gradient(#00f0ff 1px, transparent 1px), linear-gradient(90deg, #00f0ff 1px, transparent 1px)', backgroundSize: '40px 40px'}}>
+              <div className="absolute inset-0 opacity-20"
+                style={{ backgroundImage: 'linear-gradient(#00f0ff 1px, transparent 1px), linear-gradient(90deg, #00f0ff 1px, transparent 1px)', backgroundSize: '40px 40px' }}>
               </div>
-              
+
               {/* Radial Glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#00f0ff]/5 rounded-full blur-[120px]"></div>
 
@@ -549,7 +705,7 @@ export default function ClassroomCamera() {
                 <h2 className="text-4xl font-black tracking-[0.3em] uppercase mb-4 text-transparent bg-clip-text bg-gradient-to-r from-[#00f0ff] to-[#00ff9d] drop-shadow-[0_0_15px_rgba(0,240,255,0.5)]">
                   TERMINAL SÉCURISÉ
                 </h2>
-                
+
                 <div className="flex items-center gap-4 px-6 py-2 bg-black/40 border border-[#00f0ff]/20 rounded-full backdrop-blur-md">
                   <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-ping"></div>
                   <p className="tracking-[0.2em] text-xs font-bold text-[#00f0ff]/80 uppercase">
@@ -590,9 +746,9 @@ export default function ClassroomCamera() {
           )}
 
           {/* ─── THE FLOATING SCANNING BAR (LOOPING) ─── */}
-            {(status.includes('holding') || status.includes('scanning')) && (
-              <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
-                <style>{`
+          {(status.includes('holding') || status.includes('scanning')) && (
+            <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
+              <style>{`
                    @keyframes scanFloating {
                      0% { top: 0%; }
                      50% { top: 100%; }
@@ -603,177 +759,176 @@ export default function ClassroomCamera() {
                    }
                  `}</style>
 
-                {/* Moving Laser Beam */}
+              {/* Moving Laser Beam */}
+              <div
+                className={`absolute left-0 right-0 h-1.5 ${themeBgClass} shadow-[0_0_30px_CURRENTCOLOR,0_0_60px_CURRENTCOLOR] animate-scan-floating z-50`}
+                style={{ color: themeColor }}
+              />
+
+              {/* Glowing Gradient Trail */}
+              <div
+                className="absolute left-0 right-0 h-40 opacity-20 animate-scan-floating"
+                style={{
+                  background: `linear-gradient(to bottom, transparent, ${themeColor}, transparent)`,
+                  marginTop: '-20px',
+                }}
+              />
+
+            </div>
+          )}
+
+          {/* Holographic Overlays for Success/Error */}
+          {!status.includes('ready') &&
+            !status.includes('holding') &&
+            !status.includes('scanning') &&
+            status !== 'standby' &&
+            status !== 'paused' &&
+            !showPinPad && (
+              <div className="absolute inset-0 z-40 backdrop-blur-sm bg-black/60 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
                 <div
-                  className={`absolute left-0 right-0 h-1.5 ${themeBgClass} shadow-[0_0_30px_CURRENTCOLOR,0_0_60px_CURRENTCOLOR] animate-scan-floating z-50`}
-                  style={{ color: themeColor }}
-                />
-
-                {/* Glowing Gradient Trail */}
-                <div
-                  className="absolute left-0 right-0 h-40 opacity-20 animate-scan-floating"
-                  style={{
-                    background: `linear-gradient(to bottom, transparent, ${themeColor}, transparent)`,
-                    marginTop: '-20px',
-                  }}
-                />
-
-                {/* Pulsing Active Reticle */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div
-                    className={`w-[25%] aspect-square border-2 ${themeClass} rounded-[40px] animate-pulse duration-75`}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Holographic Overlays for Success/Error */}
-            {!status.includes('ready') &&
-              !status.includes('holding') &&
-              !status.includes('scanning') &&
-              status !== 'standby' &&
-              status !== 'paused' &&
-              !showPinPad && (
-                <div className="absolute inset-0 z-40 backdrop-blur-sm bg-black/60 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
-                  <div
-                    className={`w-full max-w-lg p-10 text-center border-y-2 bg-black/80 shadow-[0_0_40px_rgba(0,0,0,0.8)] ${
-                      status.includes('success')
-                        ? 'border-[#00ff9d] text-[#00ff9d]'
-                        : status === 'duplicate' || status === 'wrong_group'
-                          ? 'border-[#ffb000] text-[#ffb000]'
-                          : 'border-[#ff003c] text-[#ff003c]'
+                  className={`w-full max-w-lg p-10 text-center border-y-2 bg-black/80 shadow-[0_0_40px_rgba(0,0,0,0.8)] ${status.includes('success')
+                    ? 'border-[#00ff9d] text-[#00ff9d]'
+                    : status === 'duplicate' || status === 'wrong_group'
+                      ? 'border-[#ffb000] text-[#ffb000]'
+                      : 'border-[#ff003c] text-[#ff003c]'
                     }`}
-                  >
-                    <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-xl bg-current/10 border border-current animate-pulse">
-                      {status.includes('success') ? (
-                        <UserCheck size={40} className="text-current" />
-                      ) : status === 'duplicate' ? (
-                        <ShieldAlert size={40} className="text-current" />
-                      ) : status === 'wrong_group' ? (
-                        <UserX size={40} className="text-current" />
-                      ) : status === 'liveness_failed' ? (
-                        <ShieldAlert size={40} className="text-current" />
-                      ) : (
-                        <AlertTriangle size={40} className="text-current" />
-                      )}
-                    </div>
-                    <h2 className="text-3xl font-black tracking-[0.1em] uppercase mb-3">
-                      {result?.message}
-                    </h2>
-                    <p className="text-xl tracking-widest text-white">
-                      {result?.name || 'ENTITÉ INCONNUE'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-            {/* Prompt Overlays */}
-            {(status === 'ready' || status === 'ready_teacher') && !showPinPad && (
-              <div className="absolute inset-x-0 bottom-12 flex justify-center gap-6 z-30">
-                <button
-                  onClick={() => setStatus(status === 'ready' ? 'holding' : 'holding_teacher')}
-                  className={`px-10 py-4 bg-black/80 backdrop-blur-md border ${themeClass} text-white font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95`}
                 >
-                  <ScanFace size={24} className={themeClass.split(' ')[0]} />
-                  {status === 'ready' ? 'SCAN ÉTUDIANT' : 'AUTHENTIFICATION REQUISE'}
-                </button>
-
-                {status === 'ready_teacher' && (
-                  <button
-                    onClick={() => setShowPinPad(true)}
-                    className="px-8 py-4 bg-black/80 backdrop-blur-md border border-[#ffb000] text-[#ffb000] font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95"
-                  >
-                    <Lock size={20} />
-                    CODE PIN
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Tech PIN Pad */}
-            {showPinPad && (
-              <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in zoom-in-95 duration-200">
-                <div className="bg-[#020617] p-8 border border-[#ffb000] shadow-[0_0_30px_rgba(255,176,0,0.3)] max-w-sm w-full">
-                  <h3 className="text-[#ffb000] text-center font-bold text-lg tracking-widest mb-6 uppercase">
-                    SAISIE CODE ENSEIGNANT
-                  </h3>
-
-                  <div className="flex justify-center gap-4 mb-8">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className={`w-4 h-4 rounded-full border-2 transition-all ${
-                          pinInput.length > i
-                            ? 'bg-[#ffb000] border-[#ffb000] shadow-[0_0_10px_rgba(255,176,0,0.8)]'
-                            : 'border-slate-700 bg-transparent'
-                        }`}
-                      />
-                    ))}
+                  <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-xl bg-current/10 border border-current animate-pulse">
+                    {status.includes('success') ? (
+                      <UserCheck size={40} className="text-current" />
+                    ) : status === 'duplicate' ? (
+                      <ShieldAlert size={40} className="text-current" />
+                    ) : status === 'wrong_group' ? (
+                      <UserX size={40} className="text-current" />
+                    ) : status === 'liveness_failed' ? (
+                      <ShieldAlert size={40} className="text-current" />
+                    ) : (
+                      <AlertTriangle size={40} className="text-current" />
+                    )}
                   </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'OK'].map((key) => (
-                      <button
-                        key={key}
-                        onClick={async () => {
-                          if (key === 'C') setPinInput('');
-                          else if (key === 'OK') {
-                            if (!activeSession) return;
-                            try {
-                              const res = await fetch(
-                                `${API}/api/sessions/${activeSession.id}/verify-pin`,
-                                {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ pin_code: pinInput }),
-                                }
-                              );
-                              const data = await res.json();
-                              if (res.ok && data.status === 'success') {
-                                setIsTeacherUnlocked(true);
-                                setStatus('ready');
-                                setResult({ message: 'CODE ACCEPTÉ' });
-                                setTimeout(() => setResult(null), 3000);
-                              } else {
-                                setResult({ message: 'CODE INCORRECT' });
-                                setStatus('teacher_error');
-                                setTimeout(() => {
-                                  setResult(null);
-                                  setStatus('ready_teacher');
-                                }, 3000);
-                              }
-                            } catch (e) {
-                              console.error(e);
-                            }
-                            setShowPinPad(false);
-                            setPinInput('');
-                          } else if (pinInput.length < 4) setPinInput(pinInput + key);
-                        }}
-                        className={`py-4 text-2xl font-mono border transition-all active:scale-95 ${
-                          key === 'OK'
-                            ? 'bg-[#ffb000]/20 text-[#ffb000] border-[#ffb000] hover:bg-[#ffb000]/40'
-                            : key === 'C'
-                              ? 'bg-red-500/10 text-red-500 border-red-500/50 hover:bg-red-500/30'
-                              : 'bg-slate-800/50 text-white border-slate-700 hover:bg-slate-700 hover:border-slate-500'
-                        }`}
-                      >
-                        {key}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowPinPad(false);
-                      setPinInput('');
-                    }}
-                    className="mt-8 w-full py-3 text-slate-500 text-xs tracking-widest uppercase hover:text-white transition-colors"
-                  >
-                    ANNULER
-                  </button>
+                  <h2 className="text-3xl font-black tracking-[0.1em] uppercase mb-3">
+                    {result?.message}
+                  </h2>
+                  <p className="text-xl tracking-widest text-white mb-6">
+                    {result?.name || 'ENTITÉ INCONNUE'}
+                  </p>
+                  {status === 'teacher_error' && (
+                    <button
+                      onClick={() => setShowPinPad(true)}
+                      className="mt-4 px-6 py-3 bg-[#ffb000] text-black font-black rounded-xl hover:scale-105 transition-transform flex items-center gap-2 mx-auto uppercase text-sm tracking-tighter"
+                    >
+                      <Lock size={16} /> Utiliser Code PIN
+                    </button>
+                  )}
                 </div>
               </div>
             )}
-          </div>
+
+          {/* Prompt Overlays */}
+          {(status === 'ready' || status === 'ready_teacher') && !showPinPad && (
+            <div className="absolute inset-x-0 bottom-12 flex justify-center gap-6 z-30">
+              <button
+                onClick={() => setStatus(status === 'ready' ? 'holding' : 'holding_teacher')}
+                className={`px-10 py-4 bg-black/80 backdrop-blur-md border ${themeClass} text-white font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95`}
+              >
+                <ScanFace size={24} className={themeClass.split(' ')[0]} />
+                {status === 'ready' ? 'SCAN ÉTUDIANT' : 'AUTHENTIFICATION REQUISE'}
+              </button>
+
+              {status === 'ready_teacher' && (
+                <button
+                  onClick={() => setShowPinPad(true)}
+                  className="px-8 py-4 bg-black/80 backdrop-blur-md border border-[#ffb000] text-[#ffb000] font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95"
+                >
+                  <Lock size={20} />
+                  CODE PIN
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Tech PIN Pad */}
+          {showPinPad && (
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-[#020617] p-8 border border-[#ffb000] shadow-[0_0_30px_rgba(255,176,0,0.3)] max-w-sm w-full">
+                <h3 className="text-[#ffb000] text-center font-bold text-lg tracking-widest mb-6 uppercase">
+                  SAISIE CODE ENSEIGNANT
+                </h3>
+
+                <div className="flex justify-center gap-4 mb-8">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className={`w-4 h-4 rounded-full border-2 transition-all ${pinInput.length > i
+                        ? 'bg-[#ffb000] border-[#ffb000] shadow-[0_0_10px_rgba(255,176,0,0.8)]'
+                        : 'border-slate-700 bg-transparent'
+                        }`}
+                    />
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'OK'].map((key) => (
+                    <button
+                      key={key}
+                      onClick={async () => {
+                        if (key === 'C') setPinInput('');
+                        else if (key === 'OK') {
+                          if (!activeSession) return;
+                          try {
+                            const res = await fetch(
+                              `${API}/api/sessions/${activeSession.id}/verify-pin`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ pin_code: pinInput }),
+                              }
+                            );
+                            const data = await res.json();
+                            if (res.ok && data.status === 'success') {
+                              setIsTeacherUnlocked(true);
+                              setStatus('ready');
+                              setResult({ message: 'CODE ACCEPTÉ' });
+                              setTimeout(() => setResult(null), 3000);
+                            } else {
+                              setResult({ message: 'CODE INCORRECT' });
+                              setStatus('teacher_error');
+                              setTimeout(() => {
+                                setResult(null);
+                                setStatus('ready_teacher');
+                              }, 3000);
+                            }
+                          } catch (e) {
+                            console.error(e);
+                          }
+                          setShowPinPad(false);
+                          setPinInput('');
+                        } else if (pinInput.length < 4) setPinInput(pinInput + key);
+                      }}
+                      className={`py-4 text-2xl font-mono border transition-all active:scale-95 ${key === 'OK'
+                        ? 'bg-[#ffb000]/20 text-[#ffb000] border-[#ffb000] hover:bg-[#ffb000]/40'
+                        : key === 'C'
+                          ? 'bg-red-500/10 text-red-500 border-red-500/50 hover:bg-red-500/30'
+                          : 'bg-slate-800/50 text-white border-slate-700 hover:bg-slate-700 hover:border-slate-500'
+                        }`}
+                    >
+                      {key}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPinPad(false);
+                    setPinInput('');
+                  }}
+                  className="mt-8 w-full py-3 text-slate-500 text-xs tracking-widest uppercase hover:text-white transition-colors"
+                >
+                  ANNULER
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ─── HUD FOOTER ─── */}

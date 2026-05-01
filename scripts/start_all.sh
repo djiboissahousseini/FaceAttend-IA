@@ -28,7 +28,7 @@ echo "🚀 Démarrage du Backend (FastAPI)..."
 cd "$PROJECT_ROOT/backend"
 # Utilisation du chemin relatif pour le venv
 source ../venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000 > ../logs/backend.log 2> ../logs/backend.error &
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload > ../logs/backend.log 2> ../logs/backend.error &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 

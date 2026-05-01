@@ -59,6 +59,57 @@ function parseTeacherFromStorage(raw: string | null): Teacher | null {
   }
 }
 
+function RecentPerformanceItem({ session, allCourses }: { session: Session; allCourses: Course[] }) {
+  const [rate, setRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function fetchRate() {
+      try {
+        const res = await fetch(`${API_URL}/api/sessions/${session.id}/attendance`);
+        if (res.ok) {
+          const data = await res.json();
+          const students = data.students || [];
+          if (students.length === 0) {
+            setRate(0);
+            return;
+          }
+          const present = students.filter((s: any) => s.status === 'present' || s.status === 'late').length;
+          setRate(Math.round((present / students.length) * 100));
+        } else {
+          setRate(0);
+        }
+      } catch {
+        setRate(0);
+      }
+    }
+    fetchRate();
+  }, [session.id]);
+
+  return (
+    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+      <div className="min-w-0 pr-2">
+        <p className="text-xs font-bold text-slate-800 truncate">{session.course_name}</p>
+        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+          Groupe {session.group_name}
+        </p>
+        <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-1">
+          {session.session_date} • {session.start_time?.substring(0, 5) || '--:--'} - {session.end_time?.substring(0, 5) || '--:--'}
+        </p>
+      </div>
+      <div className="text-right flex flex-col items-end">
+        {rate === null ? (
+          <div className="w-6 h-4 bg-slate-200 animate-pulse rounded mb-1" />
+        ) : (
+          <p className={`text-xs font-black ${rate < 50 ? 'text-red-600' : rate < 75 ? 'text-amber-500' : 'text-emerald-600'}`}>
+            {rate}%
+          </p>
+        )}
+        <p className="text-[10px] text-slate-400 uppercase leading-none">Présence</p>
+      </div>
+    </div>
+  );
+}
+
 export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher' | 'simulation' }) {
   // ─── Authentication State ───────────────────────────────────────────────────
   const [teachersList, setTeachersList] = useState<Teacher[]>([]);
@@ -741,52 +792,23 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
             </div>
 
             {/* Active Session / Controls */}
-            <div
-              className={`bg-white rounded-3xl border border-slate-200 p-8 shadow-sm transition-all ${activeSession ? 'cursor-pointer hover:border-blue-300 group' : ''}`}
-              onClick={() => {
-                if (activeSession) {
-                  const course = allCourses.find(c => c.name === activeSession.course_name);
-                  if (course) loadCourseStudents(course);
-                  else loadCourseStudents({
-                    id: activeSession.course_id || '',
-                    name: activeSession.course_name,
-                    group_name: activeSession.group_name
-                  } as Course);
-                }
-              }}
-            >
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm transition-all group">
               {activeSession ? (
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="bg-blue-100 text-blue-600 text-[10px] font-black uppercase px-2 py-1 rounded-lg">Session en cours</span>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase group-hover:text-blue-500 transition-colors">Cliquer pour voir la liste étudiants</span>
+                      <span className="bg-emerald-100 text-emerald-600 border border-emerald-200 text-[10px] font-black uppercase px-2 py-1 rounded-lg animate-pulse flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Session Active sur Caméra
+                      </span>
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 leading-tight group-hover:text-blue-600 transition-colors">{activeSession.course_name}</h3>
-                    <p className="text-slate-500 font-medium">Groupe {activeSession.group_name} • {activeSession.classroom}</p>
+                    <h3 className="text-2xl font-black text-slate-900 leading-tight">{activeSession.course_name}</h3>
+                    <p className="text-slate-500 font-medium">Groupe {activeSession.group_name} • {activeSession.classroom} • {activeSession.start_time?.substring(0, 5) || '--:--'} - {activeSession.end_time?.substring(0, 5) || '--:--'}</p>
                     <p className="text-slate-400 text-xs mt-1">Professeur : {activeSession.teacher_name || 'Inconnu'}</p>
                   </div>
-                  {loggedInTeacher && (String(activeSession.teacher_id) === String(loggedInTeacher.id) || activeSession.teacher_name === loggedInTeacher.name) ? (
-                    <div className="flex gap-3 w-full md:w-auto" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => sendCommand('OVERRIDE_TEACHER')}
-                        className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20"
-                      >
-                        <Unlock size={18} /> Ouvrir
-                      </button>
-                      <button
-                        onClick={closeActiveSession}
-                        className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-red-500/20"
-                      >
-                        <PowerOff size={18} /> Fermer la session
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-xl flex items-center gap-3">
-                      <Lock size={16} className="text-slate-400" />
-                      <p className="text-xs font-bold text-slate-500 uppercase">Verrouillé (Autre Professeur)</p>
-                    </div>
-                  )}
+                  <div className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-xl flex items-center gap-3">
+                    <Activity size={16} className="text-blue-500" />
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Enregistrement en cours</p>
+                  </div>
                 </div>
               ) : (
                 <div className="py-10 text-center space-y-4">
@@ -840,7 +862,7 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                           className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors group cursor-pointer"
                           onClick={() => {
                             if (sessionCourse) {
-                              loadCourseStudents(sessionCourse);
+                              loadCourseStudents({ ...sessionCourse, group_name: s.group_name });
                             } else {
                               // Fallback if course not in full list
                               loadCourseStudents({
@@ -857,29 +879,35 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                             </div>
                             <div>
                               <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{s.course_name}</p>
-                              <p className="text-xs text-slate-500 font-medium">Groupe {s.group_name} • {s.start_time}</p>
+                              <p className="text-xs text-slate-500 font-medium">Groupe {s.group_name} • {s.classroom || 'Salle non spécifiée'}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{s.start_time || '--:--'} - {s.end_time || '--:--'}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            {s.id === activeSession?.id ? (
-                              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse">
+                            {s.status === 'active' || s.id === activeSession?.id ? (
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase rounded-full animate-pulse border border-emerald-200">
                                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> EN COURS
                               </span>
                             ) : s.status === 'closed' ? (
-                              <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-full">
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-full border border-slate-200">
                                 <CheckCircle2 size={12} /> TERMINÉ
                               </span>
                             ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  sendCommand('FORCE_START_SESSION', { session_id: s.id });
-                                }}
-                                className="p-2 text-blue-500 hover:bg-blue-100 rounded-xl transition-all relative z-10"
-                                title="Lancer maintenant"
-                              >
-                                <PlayCircle size={20} />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-600 text-[10px] font-black uppercase rounded-full border border-amber-200">
+                                  EN ATTENTE
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sendCommand('FORCE_START_SESSION', { session_id: s.id });
+                                  }}
+                                  className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-xl transition-all relative z-10"
+                                  title="Lancer maintenant"
+                                >
+                                  <PlayCircle size={18} />
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -953,10 +981,15 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-full">
-                            {c.schedule_day}
-                          </span>
-                          <ExternalLink size={14} className="text-slate-300" />
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-full">
+                              {c.schedule_day}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                              {c.schedule_time || `${(c as any).start_time || '--:--'} - ${(c as any).end_time || '--:--'}`}
+                            </span>
+                          </div>
+                          <ExternalLink size={14} className="text-slate-300 ml-2" />
                         </div>
                       </button>
                     ))
@@ -974,19 +1007,10 @@ export default function TeacherDashboard({ mode = 'teacher' }: { mode?: 'teacher
                 Performance Récente
               </h3>
               <div className="space-y-4">
-                {mySessions.slice(0, 3).map(s => (
-                  <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">{s.course_name}</p>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold">{s.session_date}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-black text-blue-600">85%</p>
-                      <p className="text-[10px] text-slate-400 uppercase">Présence</p>
-                    </div>
-                  </div>
+                {mySessions.filter(s => s.status === 'closed').slice(0, 3).map(s => (
+                  <RecentPerformanceItem key={s.id} session={s} allCourses={allCourses} />
                 ))}
-                {mySessions.length === 0 && <p className="text-center text-slate-400 text-xs py-4">Aucune donnée historique.</p>}
+                {mySessions.filter(s => s.status === 'closed').length === 0 && <p className="text-center text-slate-400 text-xs py-4">Aucune donnée historique.</p>}
               </div>
             </div>
 

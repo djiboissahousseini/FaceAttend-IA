@@ -172,6 +172,7 @@ class TeacherCreate(BaseModel):
     name: str
     email: str
     password: Optional[str] = "password123"
+    pin_code: Optional[str] = ""
     photo_url: Optional[str] = ""
 
 class SessionCreate(BaseModel):
@@ -182,6 +183,8 @@ class SessionCreate(BaseModel):
     session_date: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
+    status: Optional[str] = 'scheduled'
+    is_active: Optional[bool] = False
 
 class SessionUpdate(BaseModel):
     status: str
@@ -278,8 +281,8 @@ def get_departments(db: Session = Depends(get_db)):
 @app.get("/api/teachers")
 def get_teachers(db: Session = Depends(get_db)):
     try:
-        result = db.execute(text("SELECT id, name, email, photo_url FROM teachers ORDER BY name"))
-        return [{"id": r[0], "name": r[1], "email": r[2], "photo_url": r[3]} for r in result]
+        result = db.execute(text("SELECT id, name, email, photo_url, pin_code, password FROM teachers ORDER BY name"))
+        return [dict(r) for r in result.mappings()]
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -299,13 +302,14 @@ def create_teacher(t: TeacherCreate, db: Session = Depends(get_db)):
         final_password = t.password if t.password and t.password.strip() else "password123"
 
         query = text("""
-            INSERT INTO teachers (name, email, password, photo_url, face_encoding, face_embedding)
-            VALUES (:name, :email, :password, :photo_url, CAST(:face_encoding AS jsonb), CAST(:face_embedding AS float[]))
+            INSERT INTO teachers (name, email, password, pin_code, photo_url, face_encoding, face_embedding)
+            VALUES (:name, :email, :password, :pin_code, :photo_url, CAST(:face_encoding AS jsonb), CAST(:face_embedding AS float[]))
         """)
         db.execute(query, {
             "name": t.name, 
             "email": t.email, 
             "password": final_password,
+            "pin_code": t.pin_code,
             "photo_url": t.photo_url,
             "face_encoding": encoding_json,
             "face_embedding": encoding
@@ -335,6 +339,7 @@ def update_teacher(teacher_id: int, t: TeacherCreate, db: Session = Depends(get_
             SET name = :name, 
                 email = :email, 
                 password = CASE WHEN :password <> '' THEN :password ELSE password END,
+                pin_code = CASE WHEN :pin_code <> '' THEN :pin_code ELSE pin_code END,
                 photo_url = COALESCE(:photo_url, photo_url),
                 face_encoding = COALESCE(CAST(:face_encoding AS jsonb), face_encoding),
                 face_embedding = COALESCE(CAST(:face_embedding AS float[]), face_embedding)
@@ -344,6 +349,7 @@ def update_teacher(teacher_id: int, t: TeacherCreate, db: Session = Depends(get_
             "name": t.name,
             "email": t.email,
             "password": t.password if t.password else '',
+            "pin_code": t.pin_code if t.pin_code else '',
             "photo_url": t.photo_url,
             "face_encoding": encoding_json,
             "face_embedding": encoding,
@@ -1182,8 +1188,8 @@ def get_sessions(db: Session = Depends(get_db)):
 def create_session(session: SessionCreate, db: Session = Depends(get_db)):
     try:
         query = text("""
-            INSERT INTO sessions (teacher_id, course_name, group_name, classroom, session_date, start_time, end_time)
-            VALUES (:teacher_id, :course_name, :group_name, :classroom, CAST(:session_date AS date), CAST(:start_time AS time), CAST(:end_time AS time))
+            INSERT INTO sessions (teacher_id, course_name, group_name, classroom, session_date, start_time, end_time, status, is_active)
+            VALUES (:teacher_id, :course_name, :group_name, :classroom, CAST(:session_date AS date), CAST(:start_time AS time), CAST(:end_time AS time), :status, :is_active)
             RETURNING id
         """)
         result = db.execute(query, {
@@ -1194,6 +1200,8 @@ def create_session(session: SessionCreate, db: Session = Depends(get_db)):
             "session_date": session.session_date,
             "start_time": session.start_time,
             "end_time": session.end_time,
+            "status": session.status,
+            "is_active": session.is_active,
         })
         row = result.fetchone()
         db.commit()
@@ -1209,20 +1217,20 @@ class PinVerifyRequest(BaseModel):
 def verify_session_pin(session_id: int, req: PinVerifyRequest, db: Session = Depends(get_db)):
     try:
         query = text("""
-            SELECT t.password 
+            SELECT t.pin_code 
             FROM sessions s
             LEFT JOIN teachers t ON s.teacher_id = t.id
             WHERE s.id = :session_id
         """)
         result = db.execute(query, {"session_id": session_id}).fetchone()
         
-        stored_password = None
+        stored_pin = None
         if result and result[0]:
-            stored_password = result[0]
+            stored_pin = result[0]
         else:
             # Fallback if teacher_id is null: match via course_name -> teacher_name
             fallback = text("""
-                SELECT t.password
+                SELECT t.pin_code
                 FROM sessions s
                 JOIN courses c ON s.course_name = c.name AND s.group_name = c.group_name
                 JOIN teachers t ON c.teacher_name = t.name
@@ -1231,12 +1239,12 @@ def verify_session_pin(session_id: int, req: PinVerifyRequest, db: Session = Dep
             """)
             res2 = db.execute(fallback, {"session_id": session_id}).fetchone()
             if res2 and res2[0]:
-                stored_password = res2[0]
+                stored_pin = res2[0]
 
-        if not stored_password:
+        if not stored_pin:
             raise HTTPException(status_code=404, detail="Teacher not found for this session")
             
-        if stored_password == req.pin_code:
+        if stored_pin == req.pin_code:
             return {"status": "success", "message": "PIN correct"}
         else:
             raise HTTPException(status_code=401, detail="PIN incorrect")
@@ -1735,30 +1743,81 @@ def upsert_record(record: AttendanceUpsert, db: Session = Depends(get_db)):
 
 def check_liveness(image_path: str) -> bool:
     import cv2
+    import numpy as np
+    
     img = cv2.imread(image_path)
     if img is None:
         return False
+        
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Variance of the Laplacian: measures the focus/sharpness
-    # A blurry image (often a photo of a screen or paper) has low variance
-    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
-    return variance > 15.0
+    
+    # 1. Sharpness check (Laplacian Variance)
+    # Low variance means blurry (print-out, bad photo)
+    # High variance might be a real face or a high-res screen
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    
+    # 2. FFT Analysis for Moiré/Grid Detection (Screen Detection)
+    # Screens have a regular grid of pixels that creates periodic noise in photos
+    rows, cols = gray.shape
+    # Use a smaller window for faster FFT and localized detection
+    size = 256
+    if rows > size and cols > size:
+        h_start = (rows - size) // 2
+        w_start = (cols - size) // 2
+        roi = gray[h_start:h_start+size, w_start:w_start+size]
+    else:
+        roi = gray
+        
+    f = np.fft.fft2(roi)
+    fshift = np.fft.fftshift(f)
+    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+    
+    # Measure energy in the high frequency bands (excluding the DC component)
+    crow, ccol = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
+    # Mask the center
+    magnitude_spectrum[crow-10:crow+10, ccol-10:ccol+10] = 0
+    high_freq_energy = np.mean(magnitude_spectrum)
+    
+    # 3. Detection Logic
+    is_live = True
+    reason = "Real"
+    
+    # Low sharpness detection
+    if laplacian_var < 30.0: # Increased threshold from 15.0
+        is_live = False
+        reason = f"Blurry/LowRes (Var: {laplacian_var:.1f})"
+    
+    # Screen detection via FFT energy
+    # Heuristic: photos of screens tend to have much higher high-freq energy
+    # due to the pixel grid / moiré patterns.
+    if high_freq_energy > 100.0: 
+        is_live = False
+        reason = f"Screen detected (Energy: {high_freq_energy:.1f})"
+        
+    print(f"LIVENESS: {'PASSED' if is_live else 'FAILED'} | {reason}")
+    return is_live
 
 @app.post("/api/sessions/{session_id}/recognize")
 async def recognize_face(session_id: str, request: RecognizeRequest, db: Session = Depends(get_db)):
     try:
+        print(f"--- Recognize Request [{request.target_type}] ---")
+        print(f"Liveness Enabled: {request.liveness_enabled}")
+        
         header, encoded = request.image.split(",", 1)
         data = base64.b64decode(encoded)
         temp_filename = f"temp_{uuid.uuid4()}.jpg"
         temp_path = os.path.join(UPLOAD_DIR, temp_filename)
         with open(temp_path, "wb") as f:
             f.write(data)
-
+            
         # Liveness Detection Check
-        if request.liveness_enabled and not check_liveness(temp_path):
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            return {"match": False, "message": "Échec Liveness (Image floue/suspecte)", "status": "liveness_failed"}
+        if request.liveness_enabled:
+            if not check_liveness(temp_path):
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                return {"match": False, "message": "ALERTE : Tentative de fraude (écran/photo)", "status": "liveness_failed"}
+        else:
+            print("Liveness check skipped (disabled by admin)")
 
         # apply_enhancement=True : active CLAHE pour compenser la basse lumière en salle
         target_encoding = compute_face_encoding(temp_path, apply_enhancement=True)

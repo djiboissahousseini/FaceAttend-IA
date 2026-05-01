@@ -18,7 +18,8 @@ import {
   PauseCircle,
   Trash2,
   Play,
-  Users
+  Users,
+  Calendar
 } from 'lucide-react';
 import { Session, Student, Teacher, Course } from '../types';
 
@@ -72,8 +73,36 @@ export default function Attendance() {
   });
   const [activeSession, setActiveSession] = useState<Session | null>(null);
 
-  const [livenessEnabled, setLivenessEnabled] = useState(true);
-  const [autoTracking, setAutoTracking] = useState(true);
+  const [livenessEnabled, setLivenessEnabled] = useState(() => {
+    const saved = localStorage.getItem('faceattend_liveness_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [autoTracking, setAutoTracking] = useState(() => {
+    const saved = localStorage.getItem('faceattend_auto_tracking_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('faceattend_liveness_enabled', JSON.stringify(livenessEnabled));
+  }, [livenessEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('faceattend_auto_tracking_enabled', JSON.stringify(autoTracking));
+  }, [autoTracking]);
+
+  // Sync with storage changes (e.g. if updated from camera or other dashboard)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'faceattend_liveness_enabled' && e.newValue) {
+        setLivenessEnabled(JSON.parse(e.newValue));
+      }
+      if (e.key === 'faceattend_auto_tracking_enabled' && e.newValue) {
+        setAutoTracking(JSON.parse(e.newValue));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     Promise.all([fetchTeachers(), fetchSessions(), fetchCourses(), fetchClassrooms()]);
@@ -290,14 +319,17 @@ export default function Attendance() {
     if (!sessionForm.teacher_id || !sessionForm.course_name || !sessionForm.group_name) return;
 
     // Conflict detection
-    if (launch) {
-      const existingActive = sessions.find(s => s.classroom === sessionForm.classroom && s.status === 'active');
-      if (existingActive) {
+    const existingActive = sessions.find(s => s.classroom === sessionForm.classroom && s.status === 'active');
+    
+    if (existingActive) {
+      if (launch) {
         if (!confirm(`Attention : Une session de "${existingActive.course_name}" est déjà en cours dans la ${sessionForm.classroom}. Voulez-vous l'arrêter pour lancer la nouvelle session ?`)) {
           return;
         }
         // Stop the existing one first
         await cancelActiveSession(existingActive.id);
+      } else {
+        alert(`Information : La salle ${sessionForm.classroom} est actuellement occupée par le cours "${existingActive.course_name}".\n\nLe cours que vous planifiez sera mis en attente dans la file de la Surveillance Directe.`);
       }
     }
 
@@ -320,6 +352,7 @@ export default function Attendance() {
 
       if (typeof data?.id === 'number') {
         loadSession(data.id);
+        setActiveTab('live');
         if (launch) {
           sendCommand('FORCE_START_SESSION', { session_id: data.id });
           alert(`Session lancée avec succès sur le terminal : ${sessionForm.classroom}`);
@@ -333,11 +366,11 @@ export default function Attendance() {
   }
 
   async function launchExistingSession(id: number) {
-    const session = sessions.find(s => s.id === id);
+    const session = sessions.find(s => String(s.id) === String(id));
     if (!session) return;
 
     // Conflict detection
-    const existingActive = sessions.find(s => s.classroom === session.classroom && s.status === 'active' && s.id !== id);
+    const existingActive = sessions.find(s => s.classroom === session.classroom && s.status === 'active' && String(s.id) !== String(id));
     if (existingActive) {
       if (!confirm(`Attention : Une session de "${existingActive.course_name}" est déjà en cours dans la ${session.classroom}. Voulez-vous l'arrêter pour lancer celle-ci ?`)) {
         return;
@@ -653,7 +686,7 @@ export default function Attendance() {
                     </span>
                     Détection Active
                   </p>
-                  {selectedSessionId === activeSession.id && sessionDetails && (
+                  {selectedSessionId === Number(activeSession.id) && sessionDetails && (
                     <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg">
                       <span className="text-[10px] font-black text-emerald-500">
                         {sessionDetails.students.filter(s => s.status === 'present' || s.status === 'late').length} / {sessionDetails.students.length} PRÉSENTS
@@ -697,7 +730,7 @@ export default function Attendance() {
                     Clôturer la session
                   </button>
                   <button
-                    onClick={() => loadSession(activeSession.id)}
+                    onClick={() => loadSession(Number(activeSession.id))}
                     className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20"
                     title="Voir les détails"
                   >
@@ -827,9 +860,9 @@ export default function Attendance() {
                       >
                         <div className="relative z-10">
                           <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full">
-                              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                              <span className="text-[10px] font-black uppercase">EN COURS D'ENREGISTREMENT</span>
+                            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/30 shadow-lg">
+                              <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-white">SÉANCE ACTUELLE SUR CAMÉRA</span>
                             </div>
                             <div
                               onClick={(e) => {
@@ -894,16 +927,22 @@ export default function Attendance() {
                   // Then by start time
                   return (a.start_time || '').localeCompare(b.start_time || '');
                 })
-                .map((s) => (
-                  <div
-                    key={s.id}
-                    className={`group relative p-4 rounded-2xl border-2 transition-all ${selectedSessionId === Number(s.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : s.status === 'closed'
-                          ? 'border-slate-100 bg-slate-50 opacity-60'
-                          : 'border-slate-50 hover:border-slate-200 bg-white'
-                      }`}
-                  >
+                .map((s) => {
+                  const isActiveSessionInRoom = sessions.some(act => act.status === 'active' && act.classroom === activeClassroom && act.id !== s.id);
+                  const isScheduledConflict = (s.status === 'scheduled' || (!s.status && s.is_active === false)) && isActiveSessionInRoom;
+                  
+                  return (
+                    <div
+                      key={s.id}
+                      className={`group relative p-4 rounded-2xl border-2 transition-all ${selectedSessionId === Number(s.id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : s.status === 'closed'
+                            ? 'border-slate-100 bg-slate-50 opacity-60'
+                            : isScheduledConflict
+                              ? 'border-orange-200 bg-orange-50/50 hover:border-orange-300'
+                              : 'border-slate-50 hover:border-slate-200 bg-white'
+                        }`}
+                    >
                     <button
                       onClick={() => loadSession(Number(s.id))}
                       className="w-full text-left pr-8"
@@ -921,10 +960,21 @@ export default function Attendance() {
                               <span className="text-[9px] font-black uppercase">TERMINÉ</span>
                             </div>
                           ) : (s.status === 'scheduled' || (!s.status && s.is_active === false)) ? (
-                            <div className="flex items-center gap-1.5 bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">
-                              <CalendarClock size={8} />
-                              <span className="text-[9px] font-black uppercase">EN ATTENTE</span>
-                            </div>
+                            (() => {
+                              const isActiveSessionInRoom = sessions.some(act => act.status === 'active' && act.classroom === activeClassroom && act.id !== s.id);
+                              return (
+                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${
+                                  isActiveSessionInRoom
+                                    ? 'bg-orange-100 text-orange-600 border-orange-200'
+                                    : 'bg-amber-100 text-amber-600 border-amber-200'
+                                }`}>
+                                  {isActiveSessionInRoom ? <AlertTriangle size={8} /> : <CalendarClock size={8} />}
+                                  <span className="text-[9px] font-black uppercase">
+                                    {isActiveSessionInRoom ? 'EN ATTENTE (SALLE OCCUPÉE)' : 'EN ATTENTE'}
+                                  </span>
+                                </div>
+                              );
+                            })()
                           ) : null}
                           <span className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-black uppercase">
                             {s.group_name === 'ALL' ? 'TOUS LES GROUPES' : `GRP ${s.group_name}`}
@@ -934,7 +984,7 @@ export default function Attendance() {
                       <div className="mt-2 space-y-1">
                         <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-1.5">
                           <CalendarDays size={10} className="text-blue-500" />
-                          {new Date(s.session_date).toLocaleDateString('fr-FR')} · {s.start_time}
+                          {new Date(s.session_date).toLocaleDateString('fr-FR')} · {s.start_time || '--:--'} - {s.end_time || '--:--'}
                         </p>
                         <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5">
                           <Users size={10} className="text-purple-500" />
@@ -994,7 +1044,8 @@ export default function Attendance() {
                       </button>
                     </div>
                   </div>
-                ))
+                );
+              })
             ) : (
               (() => {
                 const days = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1032,7 +1083,7 @@ export default function Attendance() {
                     <div className="space-y-1.5">
                       <p className="text-[10px] text-slate-500 font-bold uppercase flex items-center gap-2">
                         <CalendarDays size={10} className="text-indigo-500" />
-                        {c.schedule_day} · {c.schedule_time || `${c.start_time}-${c.end_time}`}
+                        {c.schedule_day} · {c.schedule_time}
                       </p>
                       <p className="text-[10px] text-slate-400 font-bold flex items-center gap-2">
                         <Users size={10} className="text-purple-500" />

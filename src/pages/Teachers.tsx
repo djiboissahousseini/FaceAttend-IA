@@ -11,6 +11,7 @@ import {
   User,
   Key,
   Eye,
+  EyeOff,
   Edit2,
 } from 'lucide-react';
 import { getPhotoUrl } from '../utils/image';
@@ -27,8 +28,8 @@ export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => v
   const [form, setForm] = useState({
     name: '',
     email: '',
-    password: '',
-    pin_code: '',
+    password: 'password123',
+    pin_code: '0000',
     photo_url: '',
   });
   const [saving, setSaving] = useState(false);
@@ -37,7 +38,7 @@ export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => v
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [showPin, setShowPin] = useState(true);
+  const [showPin, setShowPin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => v
 
       setShowModal(false);
       setEditingId(null);
-      setForm({ name: '', email: '', password: '', pin_code: '', photo_url: '' });
+      setForm({ name: '', email: '', password: 'password123', pin_code: '0000', photo_url: '' });
       fetchTeachers();
     } catch (_err) {
       const errorMessage = (_err as Error).message || "Erreur lors de l'enregistrement";
@@ -361,9 +362,9 @@ export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => v
                       <button
                         type="button"
                         onClick={() => setShowPin(!showPin)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 p-1"
                       >
-                        {showPin ? <X size={16} /> : <Plus size={16} />}
+                        {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
                   </div>
@@ -382,9 +383,9 @@ export default function Teachers({ onNavigate }: { onNavigate?: (page: any) => v
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 p-1"
                       >
-                        {showPassword ? <X size={16} /> : <Plus size={16} />}
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
                   </div>
