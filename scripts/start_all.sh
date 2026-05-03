@@ -32,9 +32,18 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload > ../logs/backend.log 2> ..
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 
-# Attendre que le backend soit prêt
-sleep 3
-echo "   Backend prêt ✅"
+# Attendre que le backend soit prêt (le warmup Facenet prend ~30s)
+echo "   ⏳ Chargement du modèle Facenet en mémoire (peut prendre ~30s)..."
+for i in $(seq 1 45); do
+    if curl -s http://localhost:8000/api/departments > /dev/null 2>&1; then
+        echo "   ✅ Backend prêt ! (${i}s)"
+        break
+    fi
+    sleep 1
+    if [ $i -eq 45 ]; then
+        echo "   ⚠️  Backend long à démarrer — continuons quand même..."
+    fi
+done
 
 # 4. Lancer le Frontend
 echo "💻 Démarrage du Frontend (Vite)..."

@@ -11,6 +11,7 @@ import {
   Lock,
   Fingerprint,
   Video,
+  Eye,
 } from 'lucide-react';
 import { Session } from '../types';
 
@@ -40,7 +41,7 @@ export default function ClassroomCamera() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<ScanStatus>('standby');
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ name?: string; message?: string } | null>(null);
+  const [result, setResult] = useState<{ name?: string; message?: string; details?: string } | null>(null);
   const [time, setTime] = useState(new Date());
 
   const [classroom, setClassroom] = useState<string>(() => {
@@ -137,7 +138,7 @@ export default function ClassroomCamera() {
                 // Compatibilité : si on a des landmarks, la box est dans detection.box, sinon directement dans box
                 const box = detections[0].detection ? detections[0].detection.box : detections[0].box;
                 const { x, y, width, height } = box;
-                
+
                 // Calcul EAR (Eye Aspect Ratio) pour anti-spoofing pendant la capture
                 if ((status === 'holding' || status === 'holding_teacher') && detections[0].landmarks) {
                   const leftEye = detections[0].landmarks.getLeftEye();
@@ -178,44 +179,71 @@ export default function ClassroomCamera() {
     };
   }, [isIAReady, status]);
 
-  const handleResult = (newStatus: ScanStatus, resData: { name?: string; message?: string }) => {
+  const handleResult = (newStatus: ScanStatus, resData: { name?: string; message?: string; details?: string }) => {
     setStatus(newStatus);
     setResult(resData);
 
-    // VOICE (Teacher only) & SOUND FEEDBACK
-    if (newStatus === 'teacher_success' && resData.name) {
-      playSound('success');
-      speak(`Bienvenue, Monsieur ${resData.name}.`);
-    } else if (newStatus === 'success') {
-      playSound('success');
-      speak(`Présence validée pour ${resData.name}.`);
-    } else if (newStatus === 'duplicate') {
-      playSound('warning');
-      speak(`${resData.name}, vous êtes déjà enregistré.`);
-    } else if (newStatus === 'wrong_group') {
-      playSound('error');
-      speak(`${resData.name}, ce n'est pas votre groupe.`);
-    } else if (newStatus === 'liveness_failed') {
-      playSound('error');
-      speak(`Alerte sécurité : tentative de fraude détectée.`);
-    } else if (newStatus === 'unknown') {
-      playSound('error');
-      speak(`Identité non reconnue.`);
-    } else if (newStatus === 'error' || newStatus === 'teacher_error') {
-      playSound('error');
-      speak(`Erreur système.`);
+    // VOICE & SOUND FEEDBACK
+    switch (newStatus) {
+      case 'teacher_success':
+        playSound('success');
+        speak(`Bienvenue, ${resData.name}. Accès autorisé.`);
+        break;
+      case 'success':
+        playSound('success');
+        speak(`Présence validée pour ${resData.name}.`);
+        break;
+      case 'duplicate':
+        playSound('warning');
+        speak(`${resData.name}, vous êtes déjà enregistré.`);
+        break;
+      case 'wrong_group':
+      case 'teacher_error':
+        playSound('error');
+        if (resData.name?.includes('ATTENDU') || resData.name?.includes('NON RECONNU')) {
+          speak(`L'individu détecté n'est pas celui attendu.`);
+        } else {
+          speak(`Accès refusé.`);
+        }
+        break;
+      case 'liveness_failed':
+        playSound('error');
+        if (resData.name?.includes('TÉLÉPHONE')) {
+          speak(`Alerte : Tentative de fraude avec un téléphone détectée.`);
+        } else {
+          speak(`Alerte sécurité. Tentative de fraude détectée.`);
+        }
+        break;
+      case 'unknown':
+        playSound('error');
+        speak(`Identité non reconnue.`);
+        break;
+      case 'error':
+        playSound('error');
+        speak(`Erreur système ou réseau.`);
+        break;
+      default:
+        break;
     }
 
-    // Auto-reset results after 4 seconds
+    // Auto-reset results after 3-5 seconds depending on status
     if (
       !['scanning', 'holding', 'scanning_teacher', 'holding_teacher', 'standby', 'paused'].includes(
         newStatus
       )
     ) {
+      const delay = ['liveness_failed', 'wrong_group', 'error'].includes(newStatus) ? 5000 : 3500;
       setTimeout(() => {
         setResult(null);
-        setStatus(isTeacherUnlocked ? 'ready' : 'ready_teacher');
-      }, 4000);
+        if (newStatus === 'teacher_success') {
+          setStatus('ready');
+          speak("Mode présence étudiant activé.");
+        } else {
+          setStatus(prev => {
+            return (isTeacherUnlocked || newStatus === 'teacher_success') ? 'ready' : 'ready_teacher';
+          });
+        }
+      }, delay);
     }
   };
 
@@ -246,9 +274,20 @@ export default function ClassroomCamera() {
       if (targetType === 'teacher') {
         if (data.status === 'teacher_success') {
           setIsTeacherUnlocked(true);
-          handleResult('teacher_success', { name: data.student?.name, message: 'ACCÈS AUTORISÉ' });
+          handleResult('teacher_success', { 
+            name: data.student?.name || 'ENSEIGNANT', 
+            message: 'SESSION DÉVERROUILLÉE' 
+          });
+        } else if (data.status === 'wrong_teacher') {
+          handleResult('teacher_error', { 
+            name: 'INDIVIDU NON ATTENDU',
+            message: 'VOUS N\'ÊTES PAS L\'ENSEIGNANT ASSIGNÉ À CE COURS' 
+          });
         } else {
-          handleResult('teacher_error', { message: data.message || 'ACCÈS REFUSÉ' });
+          handleResult('teacher_error', { 
+            name: 'ACCÈS REFUSÉ',
+            message: data.message || 'IDENTITÉ NON RECONNUE' 
+          });
         }
       } else {
         if (data.status === 'success') {
@@ -263,41 +302,76 @@ export default function ClassroomCamera() {
               confidence_score: 1.0 - (data.student.distance || 0),
             }),
           });
-          handleResult('success', { name: data.student?.name, message: 'PRÉSENCE VALIDÉE' });
+          handleResult('success', { 
+            name: data.student?.name, 
+            message: 'PRÉSENCE ENREGISTRÉE AVEC SUCCÈS' 
+          });
         } else if (data.status === 'duplicate') {
-          handleResult('duplicate', { name: data.student?.name, message: 'DÉJÀ ENREGISTRÉ' });
+          handleResult('duplicate', { 
+            name: data.student?.name, 
+            message: 'VOTRE PRÉSENCE EST DÉJÀ VALIDÉE' 
+          });
         } else if (data.status === 'wrong_group') {
           handleResult('wrong_group', {
-            name: data.student?.name,
-            message: data.message || 'GROUPE INVALIDE',
+            name: 'INDIVIDU NON ATTENDU',
+            message: data.message || 'CE COURS NE CORRESPOND PAS À VOTRE GROUPE',
+          });
+        } else if (data.status === 'teacher_auth_required') {
+          handleResult('teacher_error', {
+            name: 'AUTHENTIFICATION REQUISE',
+            message: 'L\'ENSEIGNANT DOIT SE CONNECTER EN PREMIER',
           });
         } else if (data.status === 'liveness_failed') {
+          const isPhone = data.message?.includes('ÉCRAN') || data.message?.includes('MOIRÉ');
           handleResult('liveness_failed', {
-            name: 'ALERTE SÉCURITÉ',
-            message: data.message || 'ÉCHEC LIVENESS',
+            name: isPhone ? 'FRAUDE TÉLÉPHONE' : 'ALERTE SÉCURITÉ',
+            message: data.message?.replace('ALERTE : ', '') || 'TENTATIVE DE FRAUDE DÉTECTÉE',
           });
         } else {
-          handleResult('unknown', { message: 'VISAGE INCONNU' });
+          handleResult('unknown', { 
+            name: 'VISAGE INCONNU',
+            message: 'AUCUNE CORRESPONDANCE DANS LA BASE DE DONNÉES' 
+          });
         }
       }
     } catch (_e) {
       handleResult(targetType === 'teacher' ? 'teacher_error' : 'error', {
-        message: 'ERREUR RÉSEAU',
+        name: 'ERREUR RÉSEAU',
+        message: 'COMMUNICATION AVEC LE SERVEUR IMPOSSIBLE',
       });
     }
   };
 
-  // Enumerate cameras
+  // Enumerate cameras (Auto-detecting phone/webcam changes)
+  // IMPORTANT: le navigateur ne révèle les LABELS de toutes les caméras que si on a d'abord
+  // obtenu une permission de caméra active. On fait donc un getUserMedia silencieux pour "débloquer" la liste.
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
+    const updateDevices = async () => {
+      try {
+        // Étape 1 : Demander l'accès caméra pour débloquer les permissions (requis par le navigateur)
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        // Stopper le flux temporaire immédiatement
+        tempStream.getTracks().forEach((t) => t.stop());
+      } catch (_) {
+        // Continuer même si on n'obtient pas la permission (liste partielle)
+      }
+
+      // Étape 2 : Lister TOUTES les caméras maintenant que la permission est débloquée
+      const devices = await navigator.mediaDevices.enumerateDevices();
       const video = devices.filter((d) => d.kind === 'videoinput');
+      console.log('📷 CAMERAS DÉTECTÉES:', video.map(v => ({ label: v.label, id: v.deviceId.substring(0, 8) })));
       setVideoDevices(video);
       if (video.length > 0 && !selectedDeviceId) {
         setSelectedDeviceId(video[0].deviceId);
       }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    };
+
+    updateDevices();
+
+    // Écouter les branchements / débranchements (téléphone USB, etc.)
+    navigator.mediaDevices.addEventListener('devicechange', updateDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', updateDevices);
+  }, [selectedDeviceId]);
 
   // Listen for classroom changes AND remote commands
   useEffect(() => {
@@ -314,12 +388,10 @@ export default function ClassroomCamera() {
 
           switch (data.command) {
             case 'OVERRIDE_TEACHER':
-              if (status === 'ready_teacher' || status === 'standby') {
-                setIgnoredSessionId(null); // Permettre la reprise si on force l'accès
+              if (status === 'ready_teacher' || status === 'standby' || status === 'paused') {
+                setIgnoredSessionId(null);
                 setIsTeacherUnlocked(true);
-                setStatus('ready');
-                setResult({ message: 'ACCÈS ADMIN' });
-                setTimeout(() => setResult(null), 3000);
+                handleResult('teacher_success', { name: 'ADMINISTRATEUR', message: 'ACCÈS DÉBLOQUÉ À DISTANCE' });
               }
               break;
 
@@ -346,6 +418,20 @@ export default function ClassroomCamera() {
               });
               break;
 
+            case 'TOGGLE_LIVENESS':
+              setLivenessEnabled(!!data.payload?.enabled);
+              setResult({ message: `LIVENESS: ${data.payload?.enabled ? 'ACTIF' : 'OFF'}` });
+              speak(`Anti-Spoofing ${data.payload?.enabled ? 'activé' : 'désactivé'}`);
+              setTimeout(() => setResult(null), 2000);
+              break;
+
+            case 'TOGGLE_AUTO_TRACKING':
+              setAutoTracking(!!data.payload?.enabled);
+              setResult({ message: `SUIVI IA: ${data.payload?.enabled ? 'ACTIF' : 'OFF'}` });
+              speak(`Suivi I A ${data.payload?.enabled ? 'activé' : 'désactivé'}`);
+              setTimeout(() => setResult(null), 2000);
+              break;
+
             case 'FORCE_START_SESSION': {
               const fetchSessionToForce = async () => {
                 try {
@@ -364,14 +450,6 @@ export default function ClassroomCamera() {
               fetchSessionToForce();
               break;
             }
-            case 'TOGGLE_LIVENESS':
-              setLivenessEnabled(data.payload.enabled);
-              speak(`Anti-Spoofing ${data.payload.enabled ? 'activé' : 'désactivé'}`);
-              break;
-            case 'TOGGLE_AUTO_TRACKING':
-              setAutoTracking(data.payload.enabled);
-              speak(`Suivi I A ${data.payload.enabled ? 'activé' : 'désactivé'}`);
-              break;
           }
         } catch (err) {
           console.error('Invalid command format', err);
@@ -456,20 +534,20 @@ export default function ClassroomCamera() {
         setProgress((p) => {
           if (p >= 100) {
             clearInterval(interval);
-            
+
             // ─── LOCAL LIVENESS CHECK (Eye movement) ───
             if (livenessEnabled && earHistoryRef.current.length > 5) {
               const ears = earHistoryRef.current;
               const maxEar = Math.max(...ears);
               const minEar = Math.min(...ears);
               // Une photo fixe aura une variance d'EAR presque nulle (< 0.01).
-              // De vrais yeux présentent des micro-mouvements ou des clignements (> 0.015).
-              if (maxEar - minEar < 0.015) {
+              // De vrais yeux présentent des micro-mouvements ou des clignements (> 0.05).
+              if (maxEar - minEar < 0.05) {
                 handleResult('liveness_failed', { message: 'AUCUN MOUVEMENT OCULAIRE DÉTECTÉ' });
                 return 100;
               }
             }
-            
+
             captureAndScan(currentStatus === 'holding_teacher' ? 'teacher' : 'student');
             return 100;
           }
@@ -485,12 +563,19 @@ export default function ClassroomCamera() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  const playSound = (type: 'success' | 'error' | 'warning' | 'scan') => {
+  const playSound = (type: 'success' | 'error' | 'warning' | 'scan' | 'toggle') => {
     try {
       const AudioContextClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      
       const audioCtx = new AudioContextClass();
+      
+      // Attempt to resume context if it's suspended (common in browsers)
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 
@@ -516,7 +601,6 @@ export default function ClassroomCamera() {
         osc.start(now);
         osc.stop(now + 0.3);
       } else if (type === 'error') {
-        // Double bip grave
         osc.type = 'square';
         osc.frequency.setValueAtTime(220, now);
         gain.gain.setValueAtTime(0.1, now);
@@ -525,6 +609,15 @@ export default function ClassroomCamera() {
         gain.gain.setValueAtTime(0, now + 0.25);
         osc.start(now);
         osc.stop(now + 0.3);
+      } else if (type === 'toggle') {
+        // High pitched click for toggles
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
       } else {
         // Warning (medium)
         osc.type = 'triangle';
@@ -534,10 +627,39 @@ export default function ClassroomCamera() {
         osc.start(now);
         osc.stop(now + 0.2);
       }
+
+      // Cleanup context after sound finishes to prevent memory leaks/context limit
+      setTimeout(() => {
+        if (audioCtx.state !== 'closed') audioCtx.close();
+      }, 500);
+
     } catch (e) {
       console.error('Audio error', e);
     }
   };
+
+  // Global helper to unlock AudioContext on first user interaction
+  useEffect(() => {
+    const unlockAudio = () => {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        const ctx = new AudioContextClass();
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            console.log("AudioContext unlocked");
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('touchstart', unlockAudio);
+          });
+        }
+      }
+    };
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
 
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -611,26 +733,40 @@ export default function ClassroomCamera() {
           </div>
         </div>
 
-        {/* STATUS INDICATORS (TOP CENTER) */}
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
-          <div
-            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${livenessEnabled
+        {/* STATUS INDICATORS (TOP CENTER) - Now Interactive and Synced */}
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-50">
+          <button
+            onClick={() => {
+              const newVal = !livenessEnabled;
+              setLivenessEnabled(newVal);
+              localStorage.setItem('faceattend_liveness_enabled', JSON.stringify(newVal));
+              playSound('toggle');
+            }}
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95 ${livenessEnabled
               ? 'border-[#00ff9d] text-[#00ff9d] bg-[#00ff9d]/10 shadow-[0_0_10px_rgba(0,255,157,0.3)]'
               : 'border-red-500 text-red-500 bg-red-500/10'
               }`}
+            title="Activer/Désactiver l'Anti-Spoofing"
           >
             <ShieldAlert size={10} />
             ANTI-SPOOFING: {livenessEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div
-            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${autoTracking
+          </button>
+          <button
+            onClick={() => {
+              const newVal = !autoTracking;
+              setAutoTracking(newVal);
+              localStorage.setItem('faceattend_auto_tracking_enabled', JSON.stringify(newVal));
+              playSound('toggle');
+            }}
+            className={`px-3 py-1 border text-[9px] font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95 ${autoTracking
               ? 'border-[#00f0ff] text-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
               : 'border-slate-500 text-slate-500 bg-slate-800/50'
               }`}
+            title="Activer/Désactiver le suivi IA"
           >
             <Activity size={10} />
             SUIVI IA: {autoTracking ? 'ON' : 'OFF'}
-          </div>
+          </button>
         </div>
 
         <div className="text-right flex flex-col items-end">
@@ -664,6 +800,19 @@ export default function ClassroomCamera() {
         <div
           className={`absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 ${themeClass} z-30 transition-colors duration-500`}
         />
+
+        {/* LIVENESS CHALLENGE INDICATOR */}
+        {status.includes('holding') && livenessEnabled && (
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-cyan-500/5 backdrop-blur-[2px]">
+            <div className="relative">
+              <Eye size={64} className="text-[#00f0ff] animate-pulse" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
+            </div>
+            <p className="mt-4 text-[#00f0ff] font-black tracking-[0.3em] uppercase text-sm drop-shadow-[0_0_10px_rgba(0,240,255,0.5)]">
+              Clignez des yeux pour valider
+            </p>
+          </div>
+        )}
 
         <div className="relative w-full h-full overflow-hidden">
           {status !== 'standby' && (
@@ -814,58 +963,118 @@ export default function ClassroomCamera() {
             </div>
           )}
 
-          {/* Holographic Overlays for Success/Error */}
-          {!status.includes('ready') &&
-            !status.includes('holding') &&
-            !status.includes('scanning') &&
-            status !== 'standby' &&
-            status !== 'paused' &&
-            !showPinPad && (
-              <div className="absolute inset-0 z-40 backdrop-blur-sm bg-black/60 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
-                <div
-                  className={`w-full max-w-lg p-10 text-center border-y-2 bg-black/80 shadow-[0_0_40px_rgba(0,0,0,0.8)] ${status.includes('success')
-                    ? 'border-[#00ff9d] text-[#00ff9d]'
-                    : status === 'duplicate' || status === 'wrong_group'
-                      ? 'border-[#ffb000] text-[#ffb000]'
-                      : 'border-[#ff003c] text-[#ff003c]'
-                    }`}
-                >
-                  <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-xl bg-current/10 border border-current animate-pulse">
-                    {status.includes('success') ? (
-                      <UserCheck size={40} className="text-current" />
-                    ) : status === 'duplicate' ? (
-                      <ShieldAlert size={40} className="text-current" />
-                    ) : status === 'wrong_group' ? (
-                      <UserX size={40} className="text-current" />
-                    ) : status === 'liveness_failed' ? (
-                      <ShieldAlert size={40} className="text-current" />
-                    ) : (
-                      <AlertTriangle size={40} className="text-current" />
-                    )}
+          {/* Holographic Overlays for Success/Error/Status */}
+          {!['ready', 'holding', 'scanning', 'ready_teacher', 'holding_teacher', 'scanning_teacher', 'standby', 'paused'].includes(status) && !showPinPad && (
+            <div className="absolute inset-0 z-[70] flex items-center justify-center">
+              {/* Blurred Background with logic-based color tint */}
+              <div 
+                className={`absolute inset-0 backdrop-blur-md transition-all duration-500 ${
+                  status.includes('success') ? 'bg-[#00ff9d]/10' :
+                  status === 'duplicate' || status === 'unknown' ? 'bg-[#ffb000]/10' :
+                  'bg-[#ff003c]/10'
+                }`} 
+              />
+              
+              <div className="relative w-full max-w-xl px-4 animate-in zoom-in-95 duration-300">
+                {/* HUD Container */}
+                <div className={`relative p-8 border-y-2 bg-[#020617]/90 shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden ${
+                  status.includes('success') ? 'border-[#00ff9d] shadow-[#00ff9d]/20' :
+                  status === 'duplicate' || status === 'unknown' ? 'border-[#ffb000] shadow-[#ffb000]/20' :
+                  'border-[#ff003c] shadow-[#ff003c]/20'
+                }`}>
+                  
+                  {/* Decorative Scanlines for the message box */}
+                  <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
+
+                  {/* Icon with Animated Ring */}
+                  <div className="relative mx-auto w-28 h-28 mb-8">
+                    <div className={`absolute inset-0 rounded-full border-2 animate-ping opacity-20 ${
+                      status.includes('success') ? 'border-[#00ff9d]' :
+                      status === 'duplicate' || status === 'unknown' ? 'border-[#ffb000]' :
+                      'border-[#ff003c]'
+                    }`} />
+                    <div className={`relative w-full h-full rounded-full flex items-center justify-center border-2 bg-black/40 ${
+                      status.includes('success') ? 'border-[#00ff9d] text-[#00ff9d]' :
+                      status === 'duplicate' || status === 'unknown' ? 'border-[#ffb000] text-[#ffb000]' :
+                      'border-[#ff003c] text-[#ff003c]'
+                    }`}>
+                      {status.includes('success') ? <UserCheck size={56} /> :
+                       status === 'liveness_failed' ? <ShieldAlert size={56} /> :
+                       status === 'unknown' ? <UserX size={56} /> :
+                       status === 'duplicate' ? <ScanFace size={56} /> :
+                       <AlertTriangle size={56} />}
+                    </div>
                   </div>
-                  <h2 className="text-3xl font-black tracking-[0.1em] uppercase mb-3">
-                    {result?.message}
+
+                  {/* Message Title */}
+                  <h2 className={`text-5xl font-black tracking-[0.15em] uppercase mb-4 drop-shadow-[0_0_10px_currentColor] ${
+                    status.includes('success') ? 'text-[#00ff9d]' :
+                    status === 'duplicate' || status === 'unknown' ? 'text-[#ffb000]' :
+                    'text-[#ff003c]'
+                  }`}>
+                    {status === 'teacher_success' ? 'ACCÈS AUTORISÉ' :
+                     status === 'success' ? 'PRÉSENCE VALIDÉE' :
+                     status === 'duplicate' ? 'DÉJÀ ENREGISTRÉ' :
+                     status === 'wrong_group' || result?.name === 'INDIVIDU NON ATTENDU' ? 'INDIVIDU NON ATTENDU' :
+                     status === 'liveness_failed' ? (result?.name === 'FRAUDE TÉLÉPHONE' ? 'FRAUDE TÉLÉPHONE' : 'ALERTE SÉCURITÉ') :
+                     status === 'unknown' ? 'VISAGE INCONNU' :
+                     status === 'teacher_error' ? (result?.name === 'INDIVIDU NON ATTENDU' ? 'INDIVIDU NON ATTENDU' : 'ACCÈS REFUSÉ') : 'ERREUR SYSTÈME'}
                   </h2>
-                  <p className="text-xl tracking-widest text-white mb-6">
-                    {result?.name || 'ENTITÉ INCONNUE'}
+
+                  {/* Name or Detailed Message */}
+                  <p className="text-2xl tracking-[0.1em] text-white font-bold uppercase mb-2">
+                    {result?.name || 'VÉRIFICATION TERMINÉE'}
                   </p>
-                  {status === 'teacher_error' && (
+                  
+                  <p className="text-sm tracking-widest text-slate-400 font-medium uppercase max-w-md mx-auto">
+                    {status === 'liveness_failed' ? (result?.name === 'FRAUDE TÉLÉPHONE' ? 'TENTATIVE DE FRAUDE AVEC UN TÉLÉPHONE DÉTECTÉE' : 'TENTATIVE DE FRAUDE (ÉCRAN OU PHOTO) DÉTECTÉE') :
+                     status === 'unknown' ? 'IDENTITÉ NON RÉPERTORIÉE DANS LE SYSTÈME' :
+                     status === 'wrong_group' || result?.name === 'INDIVIDU NON ATTENDU' ? (result?.message || 'L\'INDIVIDU DÉTECTÉ N\'EST PAS CELUI ATTENDU') :
+                     status === 'duplicate' ? 'VOTRE PRÉSENCE A DÉJÀ ÉTÉ ENREGISTRÉE' :
+                     result?.message || 'OPÉRATION TERMINÉE'}
+                  </p>
+
+                  {/* Progress Indicator (Self-closing) */}
+                  <div className="mt-8 flex justify-center gap-1">
+                    <div className={`h-1 w-24 bg-slate-800 rounded-full overflow-hidden`}>
+                       <div className={`h-full animate-[progress_3.5s_linear_forwards] ${
+                         status.includes('success') ? 'bg-[#00ff9d]' :
+                         status === 'duplicate' || status === 'unknown' ? 'bg-[#ffb000]' :
+                         'bg-[#ff003c]'
+                       }`} />
+                    </div>
+                  </div>
+                  <style>{`
+                    @keyframes progress {
+                      0% { width: 0%; }
+                      100% { width: 100%; }
+                    }
+                  `}</style>
+
+                  {status === 'teacher_error' && result?.name !== 'INDIVIDU NON ATTENDU' && (
                     <button
-                      onClick={() => setShowPinPad(true)}
-                      className="mt-4 px-6 py-3 bg-[#ffb000] text-black font-black rounded-xl hover:scale-105 transition-transform flex items-center gap-2 mx-auto uppercase text-sm tracking-tighter"
+                      onClick={() => {
+                        setShowPinPad(true);
+                        playSound('toggle');
+                      }}
+                      className="mt-8 px-8 py-3 bg-[#ffb000] text-black font-black hover:bg-[#ffc107] transition-all flex items-center gap-2 mx-auto uppercase text-sm tracking-widest shadow-[0_0_20px_rgba(255,176,0,0.4)] active:scale-95"
                     >
-                      <Lock size={16} /> Utiliser Code PIN
+                      <Lock size={18} /> Tenter par Code PIN
                     </button>
                   )}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
           {/* Prompt Overlays */}
           {(status === 'ready' || status === 'ready_teacher') && !showPinPad && (
             <div className="absolute inset-x-0 bottom-12 flex justify-center gap-6 z-30">
               <button
-                onClick={() => setStatus(status === 'ready' ? 'holding' : 'holding_teacher')}
+                onClick={() => {
+                  setStatus(status === 'ready' ? 'holding' : 'holding_teacher');
+                  playSound('toggle');
+                }}
                 className={`px-10 py-4 bg-black/80 backdrop-blur-md border ${themeClass} text-white font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95`}
               >
                 <ScanFace size={24} className={themeClass.split(' ')[0]} />
@@ -874,7 +1083,10 @@ export default function ClassroomCamera() {
 
               {status === 'ready_teacher' && (
                 <button
-                  onClick={() => setShowPinPad(true)}
+                  onClick={() => {
+                    setShowPinPad(true);
+                    playSound('toggle');
+                  }}
                   className="px-8 py-4 bg-black/80 backdrop-blur-md border border-[#ffb000] text-[#ffb000] font-bold tracking-widest text-lg uppercase flex items-center gap-4 hover:bg-black transition-all shadow-[0_0_20px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <Lock size={20} />
@@ -909,6 +1121,7 @@ export default function ClassroomCamera() {
                     <button
                       key={key}
                       onClick={async () => {
+                        playSound('toggle');
                         if (key === 'C') setPinInput('');
                         else if (key === 'OK') {
                           if (!activeSession) return;
@@ -924,16 +1137,15 @@ export default function ClassroomCamera() {
                             const data = await res.json();
                             if (res.ok && data.status === 'success') {
                               setIsTeacherUnlocked(true);
-                              setStatus('ready');
-                              setResult({ message: 'CODE ACCEPTÉ' });
-                              setTimeout(() => setResult(null), 3000);
+                              handleResult('teacher_success', { 
+                                name: 'ENSEIGNANT', 
+                                message: 'CODE PIN DÉVERROUILLÉ' 
+                              });
                             } else {
-                              setResult({ message: 'CODE INCORRECT' });
-                              setStatus('teacher_error');
-                              setTimeout(() => {
-                                setResult(null);
-                                setStatus('ready_teacher');
-                              }, 3000);
+                              handleResult('teacher_error', { 
+                                name: 'CODE INCORRECT',
+                                message: 'AUTHENTIFICATION PIN ÉCHOUÉE' 
+                              });
                             }
                           } catch (e) {
                             console.error(e);
@@ -1008,11 +1220,22 @@ export default function ClassroomCamera() {
                   onChange={(e) => setSelectedDeviceId(e.target.value)}
                   className="bg-transparent text-[#00f0ff] text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer max-w-[180px] appearance-none"
                 >
-                  {videoDevices.map((device, i) => (
-                    <option key={device.deviceId} value={device.deviceId} className="bg-[#0a0f18] text-white">
-                      {device.label || `HARDWARE_DEV_${i + 1}`}
-                    </option>
-                  ))}
+                  {videoDevices.map((device, i) => {
+                    let label = device.label || `CAMÉRA SOURCE ${i + 1}`;
+                    const lowerLabel = label.toLowerCase();
+
+                    if (lowerLabel.includes('dummy') || lowerLabel.includes('v4l2') || lowerLabel.includes('loopback')) {
+                      label = '📱 TÉLÉPHONE (USB)';
+                    } else if (lowerLabel.includes('hp') || lowerLabel.includes('integrated') || lowerLabel.includes('webcam')) {
+                      label = `💻 ${label.includes('HP') ? 'WEBCAM HP' : 'WEBCAM INTERNE'}`;
+                    }
+
+                    return (
+                      <option key={device.deviceId || i} value={device.deviceId} className="bg-[#0a0f18] text-white">
+                        {label}
+                      </option>
+                    );
+                  })}
                 </select>
                 <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-pulse"></div>
               </div>

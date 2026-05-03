@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -24,16 +25,43 @@ from datetime import datetime
 MODEL_NAME = "Facenet"
 DETECTOR_BACKEND = "opencv"
 DISTANCE_METRIC = "cosine"
-THRESHOLD = 0.38           # Seuil calibré pour Facenet (cosine)
-DUPLICATE_THRESHOLD = 0.35
+THRESHOLD = 0.42           # Seuil assoupli pour Facenet (cosine) - Plus tolérant aux photos
+DUPLICATE_THRESHOLD = 0.38
 MIN_FACE_SIZE = 60
 
 
-app = FastAPI(title="FaceAttend AI Backend")
+# ─── Warmup IA au démarrage ─────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Précharge le modèle Facenet en mémoire dès le démarrage du serveur.
+    Élimine le cold start de ~32 secondes sur le 1er appel /recognize.
+    """
+    print("\n🔥 [WARMUP] Préchargement du modèle Facenet en mémoire...")
+    try:
+        dummy = np.zeros((112, 112, 3), dtype=np.uint8)
+        DeepFace.represent(
+            img_path=dummy,
+            model_name=MODEL_NAME,
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=False
+        )
+        print("✅ [WARMUP] Modèle Facenet chargé — Reconnaissance prête !")
+    except Exception as e:
+        print(f"⚠️  [WARMUP] Avertissement: {e}")
+    yield
+    # Shutdown (rien à faire)
+    print("[SHUTDOWN] FaceAttend backend arrêté.")
+
+app = FastAPI(title="FaceAttend AI Backend", lifespan=lifespan)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Suivi global des sessions déverrouillées par un enseignant
+VERIFIED_SESSIONS = {} # {session_id: teacher_id}
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
@@ -67,27 +95,21 @@ def get_file_path_from_url(url: str):
     return os.path.join(UPLOAD_DIR, filename)
 
 def apply_clahe(img: np.ndarray) -> np.ndarray:
-    """Applique CLAHE + correction gamma pour récupérer les détails en basse lumière."""
+    """Améliore le contraste sans trop déformer (utile pour les salles sombres)."""
     try:
-        # Étape 1 : Correction gamma pour débloquer l'obscurité extrême
-        mean_brightness = np.mean(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
-        if mean_brightness < 80:  # Image sombre
-            gamma = 1.8
-            lut = np.array([min(255, int((i / 255.0) ** (1.0 / gamma) * 255)) for i in range(256)], dtype=np.uint8)
-            img = cv2.LUT(img, lut)
-        # Étape 2 : CLAHE sur la luminance YUV
-        yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-        yuv[:, :, 0] = clahe.apply(yuv[:, :, 0])
-        return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        cl = clahe.apply(l)
+        limg = cv2.merge((cl, a, b))
+        return cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     except Exception:
-        return img  # En cas d'erreur, retourne l'image originale sans planter
+        return img
 
-def compute_face_encoding(image_path: str, apply_enhancement: bool = False):
+def compute_face_encoding(image_path: str, apply_enhancement=False):
     """
-    Calcule l'embedding facial d'une image.
-    - apply_enhancement=True  : pour les scans live (webcam, basse lumière)
-    - apply_enhancement=False : pour les photos d'enregistrement (on conserve la source)
+    Extrait l'empreinte faciale via DeepFace.
+    - apply_enhancement=False : évite de déformer les photos de smartphone.
     """
     try:
         img = cv2.imread(image_path)
@@ -107,11 +129,11 @@ def compute_face_encoding(image_path: str, apply_enhancement: bool = False):
         if results:
             result = results[0]
             if result["facial_area"]["w"] < MIN_FACE_SIZE:
-                print(f"Visage trop petit: {result['facial_area']['w']}px")
+                print(f"[IA] Visage trop petit: {result['facial_area']['w']}px (min {MIN_FACE_SIZE})")
                 return None
             return result["embedding"]
     except Exception as e:
-        print(f"Erreur extraction IA ({MODEL_NAME}/{DETECTOR_BACKEND}) : {e}")
+        print(f"[IA] Erreur extraction IA ({MODEL_NAME}/{DETECTOR_BACKEND}) : {e}")
     return None
 
 app.add_middleware(
@@ -1245,6 +1267,9 @@ def verify_session_pin(session_id: int, req: PinVerifyRequest, db: Session = Dep
             raise HTTPException(status_code=404, detail="Teacher not found for this session")
             
         if stored_pin == req.pin_code:
+            # Enregistrer la session comme vérifiée (PIN auth)
+            VERIFIED_SESSIONS[str(session_id)] = "pin_authorized"
+            print(f"[SECURITY] Session {session_id} UNLOCKED via PIN code")
             return {"status": "success", "message": "PIN correct"}
         else:
             raise HTTPException(status_code=401, detail="PIN incorrect")
@@ -1557,9 +1582,13 @@ def update_session(session_id: int, session: SessionUpdate, db: Session = Depend
         is_active = session.status not in ('closed', 'cancelled', 'inactive')
         
         # Check if we are closing an active session
-        if session.status == 'closed':
+        if session.status in ('closed', 'cancelled'):
             # Call our AI algorithm to mark all unscanned students as absent
             auto_mark_absents(session_id, db)
+            # Reset teacher verification status for this session
+            VERIFIED_SESSIONS.pop(str(session_id), None)
+            VERIFIED_SESSIONS.pop(int(session_id), None)
+            print(f"[SECURITY] Session {session_id} locked (Closed/Cancelled)")
             
         query = text("""
             UPDATE sessions
@@ -1741,126 +1770,165 @@ def upsert_record(record: AttendanceUpsert, db: Session = Depends(get_db)):
 
 # ─── Recognize ───────────────────────────────────────────────────────────────
 
-def check_liveness(image_path: str) -> bool:
+def get_lbp_descriptor(gray_img):
+    """Calcule un descripteur de texture LBP (Local Binary Pattern) vectorisé (Numpy).
+    Correction: cast explicite en uint8 pour éviter l'overflow int64 de NumPy >= 1.24.
+    """
+    if gray_img.shape[0] < 3 or gray_img.shape[1] < 3:
+        return np.zeros(256)
+    
+    center = gray_img[1:-1, 1:-1]
+    lbp = np.zeros(center.shape, dtype=np.uint8)
+    
+    # Décalages pour les 8 voisins — cast uint8 explicite pour éviter int64 overflow
+    lbp |= np.uint8((gray_img[0:-2, 0:-2] >= center)) << np.uint8(7)
+    lbp |= np.uint8((gray_img[0:-2, 1:-1] >= center)) << np.uint8(6)
+    lbp |= np.uint8((gray_img[0:-2, 2:]   >= center)) << np.uint8(5)
+    lbp |= np.uint8((gray_img[1:-1, 2:]   >= center)) << np.uint8(4)
+    lbp |= np.uint8((gray_img[2:, 2:]     >= center)) << np.uint8(3)
+    lbp |= np.uint8((gray_img[2:, 1:-1]   >= center)) << np.uint8(2)
+    lbp |= np.uint8((gray_img[2:, 0:-2]   >= center)) << np.uint8(1)
+    lbp |= np.uint8((gray_img[1:-1, 0:-2] >= center)) << np.uint8(0)
+    
+    hist, _ = np.histogram(lbp, bins=256, range=(0, 256))
+    return hist
+
+def check_liveness(image_path: str) -> tuple[bool, str]:
+    """
+    Détection de fraude (Anti-Spoofing) v2 - Score Pondéré.
+    Combine Laplacian, FFT, LBP et Analyse de Peau.
+    """
     import cv2
     import numpy as np
     
-    img = cv2.imread(image_path)
-    if img is None:
-        return False
+    try:
+        img = cv2.imread(image_path)
+        if img is None: return False, "Erreur de lecture"
         
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # 1. Sharpness check (Laplacian Variance)
-    # Low variance means blurry (print-out, bad photo)
-    # High variance might be a real face or a high-res screen
-    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-    
-    # 2. FFT Analysis for Moiré/Grid Detection (Screen Detection)
-    # Screens have a regular grid of pixels that creates periodic noise in photos
-    rows, cols = gray.shape
-    # Use a smaller window for faster FFT and localized detection
-    size = 256
-    if rows > size and cols > size:
-        h_start = (rows - size) // 2
-        w_start = (cols - size) // 2
-        roi = gray[h_start:h_start+size, w_start:w_start+size]
-    else:
-        roi = gray
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-    f = np.fft.fft2(roi)
-    fshift = np.fft.fftshift(f)
-    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
-    
-    # Measure energy in the high frequency bands (excluding the DC component)
-    crow, ccol = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
-    # Mask the center (DC component and low frequencies)
-    magnitude_spectrum[crow-15:crow+15, ccol-15:ccol+15] = 0
-    high_freq_energy = np.mean(magnitude_spectrum)
-    
-    # 3. Phone Bezel / Screen Edge Detection (Structural condition)
-    # Phones introduce strong, unnatural straight lines (the edges of the device)
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
-    
-    strong_phone_edges = 0
-    if lines is not None:
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            angle = np.abs(np.arctan2(y2-y1, x2-x1) * 180.0 / np.pi)
-            # Count near-vertical and near-horizontal strong lines (typical phone frame)
-            if (angle < 10 or angle > 170) or (80 < angle < 100):
-                strong_phone_edges += 1
-    
-    # 4. Detection Logic
-    is_live = True
-    reason = "Real"
-    
-    # Low sharpness detection (blurry / printout)
-    if laplacian_var < 15.0:
-        is_live = False
-        reason = f"Blurry/LowRes (Var: {laplacian_var:.1f})"
-    
-    # Strict Screen detection via FFT energy (Moiré pattern of the screen pixels)
-    elif high_freq_energy > 95.0: 
-        is_live = False
-        reason = f"Screen Moiré detected (Energy: {high_freq_energy:.1f})"
+        # 0. Analyse de Luminosité (Empêcher les faux rejets dans le noir)
+        brightness = np.mean(gray)
+        if brightness < 30:
+            return False, "IMAGE TROP SOMBRE"
+        if brightness > 240:
+            return False, "IMAGE TROP EXPOSÉE"
+
+        # 1. Analyse de Netteté Laplacian (Sharpness)
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
         
-    # Structural Phone Frame Detection (Phone edges visible + moderate screen noise)
-    elif strong_phone_edges >= 2 and high_freq_energy > 80.0:
-        is_live = False
-        reason = f"Phone Frame Detected (Edges: {strong_phone_edges})"
+        # 2. Analyse de Grille FFT (Moiré / Écrans)
+        small_gray = cv2.resize(gray, (128, 128))
+        f = np.fft.fft2(small_gray)
+        fshift = np.fft.fftshift(f)
+        magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+        magnitude_spectrum[54:74, 54:74] = 0 
+        fft_energy = np.mean(magnitude_spectrum)
         
-    print(f"LIVENESS: {'PASSED' if is_live else 'FAILED'} | {reason}")
-    return is_live
+        # 3. Analyse de Texture LBP
+        small_face = cv2.resize(gray, (64, 64))
+        lbp_hist = get_lbp_descriptor(small_face)
+        lbp_variance = np.var(lbp_hist)
+        
+        # 4. Analyse Colorimétrique (Skin tones)
+        ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+        skin_mask = cv2.inRange(ycrcb, np.array([0, 133, 77]), np.array([255, 173, 127]))
+        skin_percentage = (np.sum(skin_mask > 0) / skin_mask.size) * 100
+        
+        # --- SYSTÈME DE SCORE PONDÉRÉ (Max 100) ---
+        liveness_score = 0
+        
+        # Poids Sharpness (35 pts)
+        if laplacian_var > 30: liveness_score += 35
+        elif laplacian_var > 15: liveness_score += 15
+        
+        # Poids FFT (25 pts) - On veut peu d'énergie FFT (pas de grille)
+        if fft_energy < 110: liveness_score += 25
+        elif fft_energy < 130: liveness_score += 10
+        
+        # Poids LBP (20 pts)
+        if lbp_variance > 12: liveness_score += 20
+        elif lbp_variance > 5: liveness_score += 10
+        
+        # Poids Peau (20 pts)
+        if skin_percentage > 8: liveness_score += 20
+        elif skin_percentage > 3: liveness_score += 10
+        
+        # Décision finale (Seuil de confiance: 65%)
+        is_live = liveness_score >= 65
+        
+        reason = "RÉEL"
+        if not is_live:
+            if laplacian_var < 15: reason = "IMAGE FLOU OU PHOTO"
+            elif fft_energy > 130: reason = "ÉCRAN DÉTECTÉ (MOIRÉ)"
+            elif skin_percentage < 3: reason = "TEXTURE NON BIOLOGIQUE"
+            else: reason = "TENTATIVE DE FRAUDE"
+
+        print(f"--- [DIAGNOSTIC LIVENESS v2] ---")
+        print(f"| Score Total:    {liveness_score}/100 (Min 65)")
+        print(f"| Luminosité:     {brightness:.1f}")
+        print(f"| Sharpness:      {laplacian_var:.1f}")
+        print(f"| Moiré (FFT):    {fft_energy:.1f}")
+        print(f"| Texture (LBP):  {lbp_variance:.1f}")
+        print(f"| Skin Check:     {skin_percentage:.1f}%")
+        print(f"| RÉSULTAT:       {'✅ LIVE' if is_live else '❌ SPOOF'}")
+        print(f"--------------------------------")
+        
+        return is_live, reason
+        
+    except Exception as e:
+        print(f"Liveness internal error: {e}")
+        return True, "SYSTEM OK" # Fallback permissif en cas de bug interne
 
 @app.post("/api/sessions/{session_id}/recognize")
 async def recognize_face(session_id: str, request: RecognizeRequest, db: Session = Depends(get_db)):
+    import time
+    t0 = time.time()
     try:
-        print(f"--- Recognize Request [{request.target_type}] ---")
-        print(f"Liveness Enabled: {request.liveness_enabled}")
-        
-        header, encoded = request.image.split(",", 1)
-        data = base64.b64decode(encoded)
-        temp_filename = f"temp_{uuid.uuid4()}.jpg"
-        temp_path = os.path.join(UPLOAD_DIR, temp_filename)
-        with open(temp_path, "wb") as f:
-            f.write(data)
-            
-        # Liveness Detection Check
-        if request.liveness_enabled:
-            if not check_liveness(temp_path):
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                return {"match": False, "message": "ALERTE : Tentative de fraude (écran/photo)", "status": "liveness_failed"}
-        else:
-            print("Liveness check skipped (disabled by admin)")
-
-        # apply_enhancement=True : active CLAHE pour compenser la basse lumière en salle
-        target_encoding = compute_face_encoding(temp_path, apply_enhancement=True)
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-        if not target_encoding:
-            return {"match": False, "message": f"Visage non détecté ({DETECTOR_BACKEND})", "status": "error"}
-
-        session_query = text("SELECT teacher_id, group_name FROM sessions WHERE id = :sid")
+        # 1. Vérification Session
+        session_query = text("SELECT id, teacher_id, group_name FROM sessions WHERE id = :sid")
         session_row = db.execute(session_query, {"sid": session_id}).fetchone()
         if not session_row:
             return {"status": "no_session", "message": "Session inconnue"}
+        
+        db_session_id, session_teacher_id, session_group = session_row
+        session_id_str = str(db_session_id)
 
-        session_teacher_id = session_row[0]
-        session_group = session_row[1]
+        # 2. Sécurité : Verrouillage enseignant
+        if request.target_type == "student" and session_id_str not in VERIFIED_SESSIONS:
+            print(f"[SECURITY] Access denied for student: Session {session_id_str} is NOT verified yet.")
+            return {"status": "teacher_auth_required", "message": "L'enseignant doit d'abord s'authentifier"}
 
-        best_match = None
-        min_dist = THRESHOLD
+        print(f"\n--- ⚡ RECOGNITION REQUEST [{request.target_type}] | Session: {session_id_str} ---")
+        
+        header, encoded = request.image.split(",", 1)
+        data = base64.b64decode(encoded)
+        temp_path = os.path.join(UPLOAD_DIR, f"temp_{uuid.uuid4()}.jpg")
+        with open(temp_path, "wb") as f: f.write(data)
+            
+        # 4. Anti-Spoofing
+        if request.liveness_enabled:
+            t_live = time.time()
+            is_live, liveness_reason = check_liveness(temp_path)
+            print(f"[PERF] Liveness check took {time.time() - t_live:.3f}s")
+            if not is_live:
+                if os.path.exists(temp_path): os.remove(temp_path)
+                return {"match": False, "message": f"ALERTE : {liveness_reason}", "status": "liveness_failed"}
+        
+        # 5. Extraction IA
+        t_ia = time.time()
+        target_encoding = compute_face_encoding(temp_path, apply_enhancement=False)
+        print(f"[PERF] IA Extraction took {time.time() - t_ia:.3f}s")
+        if os.path.exists(temp_path): os.remove(temp_path)
+        
+        if not target_encoding:
+            return {"match": False, "message": "Visage non détecté ou trop loin", "status": "error"}
 
+        # 6. Matching
+        t_match = time.time()
         if request.target_type == "teacher":
-            all_teachers_query = text("SELECT id, name, face_encoding FROM teachers WHERE face_encoding IS NOT NULL")
-            all_teachers = db.execute(all_teachers_query).fetchall()
-
-            if not all_teachers:
-                return {"status": "unknown", "message": "Aucun enseignant enregistré"}
+            all_teachers = db.execute(text("SELECT id, name, face_encoding FROM teachers WHERE face_encoding IS NOT NULL")).fetchall()
+            if not all_teachers: return {"status": "unknown", "message": "Aucun enseignant enregistré"}
 
             t_ids = [r[0] for r in all_teachers]
             t_names = [r[1] for r in all_teachers]
@@ -1869,16 +1937,21 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
             distances = batch_cosine_distances(target_encoding, t_encodings)
             best_idx = int(np.argmin(distances))
             best_dist = float(distances[best_idx])
+            
+            print(f"[MATCHING] Teacher candidate: {t_names[best_idx]} | Distance: {best_dist:.3f}")
 
             if best_dist >= THRESHOLD:
                 return {"status": "unknown", "message": "Enseignant non reconnu"}
 
-            best_match = {"id": str(t_ids[best_idx]), "name": t_names[best_idx], "distance": best_dist}
-
+            best_match = {"id": str(t_ids[best_idx]), "name": t_names[best_idx]}
             if best_match["id"] != str(session_teacher_id):
-                return {"status": "wrong_teacher", "student": best_match, "message": "Contactez l'administration, vous n'êtes pas assigné à ce cours"}
+                print(f"[SECURITY] Wrong teacher: Expected {session_teacher_id}, got {best_match['id']}")
+                return {"status": "wrong_teacher", "message": "Vous n'êtes pas l'enseignant assigné à ce cours"}
 
-            return {"status": "teacher_success", "student": best_match, "message": "Authentification professeur réussie"}
+            # DÉVERROUILLAGE RÉUSSI
+            VERIFIED_SESSIONS[session_id_str] = best_match["id"]
+            print(f"[SECURITY] Session {session_id_str} UNLOCKED by teacher {best_match['name']}")
+            return {"status": "teacher_success", "student": best_match, "message": "Accès autorisé"}
 
         # DEFAULT: STUDENT SCANNING (vectorisé)
         all_students_query = text("SELECT id, full_name, face_encoding, group_name FROM students WHERE face_encoding IS NOT NULL")
@@ -1904,6 +1977,8 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
         if best_match["group"] != session_group:
             return {"status": "wrong_group", "student": best_match, "message": "Étudiant reconnu mais non inscrit à ce cours"}
 
+        print(f"[PERF] Matching took {time.time() - t_match:.3f}s")
+        print(f"[PERF] Total recognition cycle: {time.time() - t0:.3f}s")
         return {"status": "success", "student": best_match, "message": "Présence confirmée"}
 
     except Exception as e:
@@ -1921,6 +1996,8 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
         result = db.execute(query, {"sid": session_id})
         
         db.commit()
+        # Nettoyer le cache de vérification
+        VERIFIED_SESSIONS.pop(str(session_id), None)
         return {"status": "success", "message": "Session supprimée catégoriquement de la base de données"}
     except Exception as e:
         db.rollback()
