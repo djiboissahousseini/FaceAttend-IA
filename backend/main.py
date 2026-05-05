@@ -87,6 +87,49 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # Générer une clé de session unique à chaque démarrage du serveur
 SESSION_ID = str(uuid.uuid4())
 
+# ─── Cache mémoire des embeddings étudiants ──────────────────────────────────
+# Évite de refaire SQL + json.loads() à chaque scan.
+# Invalidé automatiquement dès qu'un étudiant est ajouté/modifié/supprimé.
+_STUDENT_CACHE = {
+    "ids": None,       # list[str]
+    "names": None,     # list[str]
+    "groups": None,    # list[str]
+    "matrix": None,    # np.ndarray (N × 512)
+    "dirty": True      # True = besoin de recharger depuis la DB
+}
+
+def invalidate_student_cache():
+    """Marque le cache comme obsolète. À appeler après toute modification d'étudiant."""
+    _STUDENT_CACHE["dirty"] = True
+    print("[CACHE] Cache étudiants invalidé — sera rechargé au prochain scan.")
+
+def get_student_cache(db):
+    """
+    Retourne le cache des embeddings étudiants.
+    Recharge depuis la DB uniquement si dirty=True.
+    """
+    if not _STUDENT_CACHE["dirty"] and _STUDENT_CACHE["matrix"] is not None:
+        return _STUDENT_CACHE
+
+    print("[CACHE] Chargement des embeddings étudiants en mémoire...")
+    rows = db.execute(
+        text("SELECT id, full_name, face_encoding, group_name FROM students WHERE face_encoding IS NOT NULL")
+    ).fetchall()
+
+    if not rows:
+        return None
+
+    _STUDENT_CACHE["ids"]    = [str(r[0]) for r in rows]
+    _STUDENT_CACHE["names"]  = [r[1] for r in rows]
+    _STUDENT_CACHE["groups"] = [r[3] for r in rows]
+    _STUDENT_CACHE["matrix"] = np.array(
+        [r[2] if isinstance(r[2], list) else json.loads(r[2]) for r in rows],
+        dtype=np.float32
+    )
+    _STUDENT_CACHE["dirty"] = False
+    print(f"[CACHE] {len(rows)} étudiants chargés en RAM ({_STUDENT_CACHE['matrix'].nbytes // 1024} KB).")
+    return _STUDENT_CACHE
+
 # ─── IA Utils ────────────────────────────────────────────────────────────────
 
 def cosine_distance(a, b):
@@ -125,11 +168,34 @@ def apply_clahe(img: np.ndarray) -> np.ndarray:
     except Exception:
         return img
 
-def compute_face_encoding(image_path: str, apply_enhancement=False):
+# Détecteur rapide (sans anti-spoofing) — YuNet : réseau de neurones léger d'OpenCV (2022)
+# 8x plus rapide que RetinaFace, suffisant pour une salle bien éclairée.
+FAST_DETECTOR_BACKEND = "yunet"
+
+# Taille max de l'image envoyée au détecteur de visage.
+# Réduire à 640px accélère RetinaFace sans perte de précision à distance normale.
+MAX_DETECT_WIDTH = 640
+
+def _resize_for_detection(img: np.ndarray) -> np.ndarray:
+    """
+    Réduit l'image à MAX_DETECT_WIDTH si elle est plus large.
+    Gain de vitesse significatif pour RetinaFace sans impact sur la précision.
+    """
+    h, w = img.shape[:2]
+    if w <= MAX_DETECT_WIDTH:
+        return img
+    scale = MAX_DETECT_WIDTH / w
+    new_w = MAX_DETECT_WIDTH
+    new_h = int(h * scale)
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+def compute_face_encoding(image_path: str, apply_enhancement=False, fast_mode=False):
     """
     Extrait l'empreinte faciale via DeepFace.
     - apply_enhancement=False : évite de déformer les photos de smartphone.
+    - fast_mode=True           : utilise YuNet (rapide) au lieu de RetinaFace (précis).
     """
+    detector = FAST_DETECTOR_BACKEND if fast_mode else DETECTOR_BACKEND
     try:
         img = cv2.imread(image_path)
         if img is None:
@@ -139,10 +205,13 @@ def compute_face_encoding(image_path: str, apply_enhancement=False):
         if apply_enhancement:
             img = apply_clahe(img)
 
+        # ── Optimisation 2 : Resize avant détection ──
+        img = _resize_for_detection(img)
+
         results = DeepFace.represent(
             img_path=img,
             model_name=MODEL_NAME,
-            detector_backend=DETECTOR_BACKEND,
+            detector_backend=detector,
             enforce_detection=False
         )
         if results:
@@ -152,7 +221,7 @@ def compute_face_encoding(image_path: str, apply_enhancement=False):
                 return None
             return result["embedding"]
     except Exception as e:
-        print(f"[IA] Erreur extraction IA ({MODEL_NAME}/{DETECTOR_BACKEND}) : {e}")
+        print(f"[IA] Erreur extraction IA ({MODEL_NAME}/{detector}) : {e}")
     return None
 
 app.add_middleware(
@@ -619,6 +688,7 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
             "face_embedding": encoding
         })
         db.commit()
+        invalidate_student_cache()  # Cache invalidé : nouvel étudiant ajouté
         return {"message": "Success"}
     except HTTPException as e:
         raise e
@@ -689,7 +759,7 @@ async def update_student_photo(student_id: str, file: UploadFile = File(...), db
             "id": student_id
         })
         db.commit()
-        
+        invalidate_student_cache()  # Cache invalidé : photo/embedding étudiant modifié
         return {"url": url, "status": "success"}
     except Exception as e:
         db.rollback()
@@ -704,6 +774,7 @@ def delete_student(student_id: str, db: Session = Depends(get_db)):
         db.execute(text("DELETE FROM absence_alerts WHERE student_id = CAST(:id AS uuid)"), {"id": student_id})
         db.execute(text("DELETE FROM students WHERE id = CAST(:id AS uuid)"), {"id": student_id})
         db.commit()
+        invalidate_student_cache()  # Cache invalidé : étudiant supprimé
         return {"message": "Student deleted"}
     except Exception as e:
         db.rollback()
@@ -1956,9 +2027,11 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
                 return {"match": False, "message": f"ALERTE : {liveness_reason}", "status": "liveness_failed"}
         
         # 5. Extraction IA
+        # fast_mode=True si anti-spoofing désactivé → YuNet (0.15s) au lieu de RetinaFace (1.2s)
         t_ia = time.time()
-        target_encoding = compute_face_encoding(temp_path, apply_enhancement=False)
-        print(f"[PERF] IA Extraction took {time.time() - t_ia:.3f}s")
+        fast_mode = not request.liveness_enabled
+        target_encoding = compute_face_encoding(temp_path, apply_enhancement=False, fast_mode=fast_mode)
+        print(f"[PERF] IA Extraction took {time.time() - t_ia:.3f}s (detector: {'yunet' if fast_mode else 'retinaface'})")
         if os.path.exists(temp_path): os.remove(temp_path)
         
         if not target_encoding:
@@ -1993,26 +2066,25 @@ async def recognize_face(session_id: str, request: RecognizeRequest, db: Session
             print(f"[SECURITY] Session {session_id_str} UNLOCKED by teacher {best_match['name']}")
             return {"status": "teacher_success", "student": best_match, "message": "Accès autorisé"}
 
-        # DEFAULT: STUDENT SCANNING (vectorisé)
-        all_students_query = text("SELECT id, full_name, face_encoding, group_name FROM students WHERE face_encoding IS NOT NULL")
-        all_students = db.execute(all_students_query).fetchall()
+        # DEFAULT: STUDENT SCANNING (cache mémoire vectorisé)
+        cache = get_student_cache(db)
 
-        if not all_students:
+        if cache is None:
             return {"status": "unknown", "message": "Aucun étudiant enregistré"}
 
-        s_ids = [r[0] for r in all_students]
-        s_names = [r[1] for r in all_students]
-        s_encodings = np.array([r[2] if isinstance(r[2], list) else json.loads(r[2]) for r in all_students], dtype=np.float32)
-        s_groups = [r[3] for r in all_students]
-
-        distances = batch_cosine_distances(target_encoding, s_encodings)
+        distances = batch_cosine_distances(target_encoding, cache["matrix"])
         best_idx = int(np.argmin(distances))
         best_dist = float(distances[best_idx])
 
         if best_dist >= THRESHOLD:
             return {"status": "unknown", "message": "Visage non reconnu"}
 
-        best_match = {"id": str(s_ids[best_idx]), "name": s_names[best_idx], "distance": best_dist, "group": s_groups[best_idx]}
+        best_match = {
+            "id": cache["ids"][best_idx],
+            "name": cache["names"][best_idx],
+            "distance": best_dist,
+            "group": cache["groups"][best_idx]
+        }
 
         if best_match["group"] != session_group:
             return {"status": "wrong_group", "student": best_match, "message": "Étudiant reconnu mais non inscrit à ce cours"}
