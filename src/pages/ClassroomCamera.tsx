@@ -139,12 +139,18 @@ export default function ClassroomCamera() {
                 const box = detections[0].detection ? detections[0].detection.box : detections[0].box;
                 const { x, y, width, height } = box;
 
-                // Calcul EAR (Eye Aspect Ratio) pour anti-spoofing pendant la capture
+                // Calcul EAR (Eye Aspect Ratio) pour les DEUX yeux (plus précis)
                 if ((status === 'holding' || status === 'holding_teacher') && detections[0].landmarks) {
-                  const leftEye = detections[0].landmarks.getLeftEye();
+                  const landmarks = detections[0].landmarks;
                   const dist = (p1: any, p2: any) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-                  const ear = (dist(leftEye[1], leftEye[5]) + dist(leftEye[2], leftEye[4])) / (2.0 * dist(leftEye[0], leftEye[3]));
-                  earHistoryRef.current.push(ear);
+                  
+                  const getEar = (eye: any[]) => (dist(eye[1], eye[5]) + dist(eye[2], eye[4])) / (2.0 * dist(eye[0], eye[3]));
+                  
+                  const leftEar = getEar(landmarks.getLeftEye());
+                  const rightEar = getEar(landmarks.getRightEye());
+                  const avgEar = (leftEar + rightEar) / 2.0;
+                  
+                  earHistoryRef.current.push(avgEar);
                 }
 
                 // Direct DOM update for maximum performance
@@ -524,26 +530,42 @@ export default function ClassroomCamera() {
     if (currentStatus === 'holding' || currentStatus === 'holding_teacher') {
       earHistoryRef.current = []; // Reset EAR history pour la nouvelle capture
       let initialized = false;
-      setTimeout(() => {
-        initialized = true;
-      }, 1000);
+      // Attendre 500ms avant de commencer à mesurer (visage bien en place)
+      setTimeout(() => { initialized = true; }, 500);
 
-      const step = 100 / (1000 / 50);
+      // Durée totale: 2.5 secondes pour capturer au moins un vrai clignement
+      const HOLD_DURATION_MS = 2500;
+      const TICK_MS = 50;
+      const step = 100 / (HOLD_DURATION_MS / TICK_MS);
+
       interval = setInterval(() => {
         if (!initialized) return;
         setProgress((p) => {
           if (p >= 100) {
             clearInterval(interval);
 
-            // ─── LOCAL LIVENESS CHECK (Eye movement) ───
-            if (livenessEnabled && earHistoryRef.current.length > 5) {
+            // ─── LOCAL LIVENESS CHECK (Preuve de Vie Obligatoire) ───
+            if (livenessEnabled) {
               const ears = earHistoryRef.current;
+              
+              // RÈGLE FONDAMENTALE: Pas de données = Pas d'accès
+              // Une photo sur écran ne génère PAS de landmarks fiables → ears.length reste faible
+              if (ears.length < 8) {
+                handleResult('liveness_failed', { message: 'PREUVE DE VIE IMPOSSIBLE — PHOTO OU ÉCRAN DÉTECTÉ' });
+                return 100;
+              }
+
+              // MÉTHODE 1: Vérifier si les yeux se sont VRAIMENT fermés (EAR < 0.22)
+              // Une photo ou un écran ne peut JAMAIS faire cela physiquement
+              const blinkDetected = ears.some(ear => ear < 0.22);
+              
+              // MÉTHODE 2: Variance naturelle des micro-mouvements oculaires
               const maxEar = Math.max(...ears);
               const minEar = Math.min(...ears);
-              // Une photo fixe aura une variance d'EAR presque nulle (< 0.01).
-              // De vrais yeux présentent des micro-mouvements ou des clignements (> 0.05).
-              if (maxEar - minEar < 0.05) {
-                handleResult('liveness_failed', { message: 'AUCUN MOUVEMENT OCULAIRE DÉTECTÉ' });
+              const hasVariance = (maxEar - minEar) >= 0.04;
+
+              if (!blinkDetected && !hasVariance) {
+                handleResult('liveness_failed', { message: 'CLIGNEMENT NON DÉTECTÉ — PHOTO OU ÉCRAN' });
                 return 100;
               }
             }
@@ -553,7 +575,7 @@ export default function ClassroomCamera() {
           }
           return p + step;
         });
-      }, 50);
+      }, TICK_MS);
     }
 
     return () => {
@@ -822,6 +844,8 @@ export default function ClassroomCamera() {
               screenshotFormat="image/jpeg"
               videoConstraints={{
                 deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
                 facingMode: 'user',
               }}
               className={`w-full h-full object-cover grayscale-[20%] contrast-[1.1] transition-all duration-700 ${status.includes('holding') || status.includes('scanning') ? 'scale-105 filter brightness-110' : 'scale-100'}`}

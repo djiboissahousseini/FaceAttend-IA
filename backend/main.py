@@ -19,16 +19,14 @@ import json
 import base64
 from datetime import datetime
 
-# Configuration IA (Profil: ÉQUILIBRÉ - Facenet/opencv)
-# ⚠️ IMPORTANT : Le modèle DOIT correspondre aux embeddings stockés en base.
-# Les photos ont été encodées avec Facenet → on garde Facenet.
-# Changer le modèle nécessite de re-encoder TOUTES les photos existantes.
+# Configuration IA (Profil: HAUTE PRÉCISION - RetinaFace/Facenet)
+# ⚠️ RetinaFace est beaucoup plus précis qu'opencv pour détecter les visages.
 MODEL_NAME = "Facenet"
-DETECTOR_BACKEND = "opencv"
+DETECTOR_BACKEND = "retinaface" 
 DISTANCE_METRIC = "cosine"
-THRESHOLD = 0.42           # Seuil assoupli pour Facenet (cosine) - Plus tolérant aux photos
-DUPLICATE_THRESHOLD = 0.38
-MIN_FACE_SIZE = 60
+THRESHOLD = 0.40           # Seuil légèrement plus strict pour plus de sécurité
+DUPLICATE_THRESHOLD = 0.36
+MIN_FACE_SIZE = 40         # RetinaFace peut détecter des visages plus petits
 
 # ─── Erreurs de base de données ───────────────────────────────────────────────
 
