@@ -204,6 +204,9 @@ export default function ClassroomCamera() {
         speak(`${resData.name}, vous êtes déjà enregistré.`);
         break;
       case 'wrong_group':
+        playSound('error');
+        speak(`Accès refusé. ${resData.name}, vous n'êtes pas inscrit dans ce groupe.`);
+        break;
       case 'teacher_error':
         playSound('error');
         if (resData.name?.includes('ATTENDU') || resData.name?.includes('NON RECONNU')) {
@@ -319,7 +322,7 @@ export default function ClassroomCamera() {
           });
         } else if (data.status === 'wrong_group') {
           handleResult('wrong_group', {
-            name: 'INDIVIDU NON ATTENDU',
+            name: data.student?.name || 'ÉTUDIANT',
             message: data.message || 'CE COURS NE CORRESPOND PAS À VOTRE GROUPE',
           });
         } else if (data.status === 'teacher_auth_required') {
