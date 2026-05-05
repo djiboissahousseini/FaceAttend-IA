@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, field_validator
 from typing import Optional
 import traceback
@@ -28,6 +29,26 @@ DISTANCE_METRIC = "cosine"
 THRESHOLD = 0.42           # Seuil assoupli pour Facenet (cosine) - Plus tolérant aux photos
 DUPLICATE_THRESHOLD = 0.38
 MIN_FACE_SIZE = 60
+
+# ─── Erreurs de base de données ───────────────────────────────────────────────
+
+CONSTRAINT_MESSAGES = {
+    "students_email_key": "Cet e-mail est déjà utilisé par un étudiant.",
+    "students_student_code_key": "Ce matricule (ETU...) est déjà utilisé.",
+    "teachers_email_key": "Cet e-mail est déjà utilisé par un enseignant.",
+    "courses_course_code_key": "Ce code de cours existe déjà.",
+    "attendance_records_session_id_student_id_key": "Cet étudiant est déjà marqué pour cette séance.",
+    "absence_alerts_student_id_course_id_key": "Une alerte existe déjà pour cet étudiant dans ce cours.",
+    "departments_code_key": "Ce code de département existe déjà.",
+    "classrooms_name_key": "Ce nom de salle existe déjà."
+}
+
+def get_integrity_error_detail(e: IntegrityError) -> str:
+    error_msg = str(e.orig)
+    for constraint, message in CONSTRAINT_MESSAGES.items():
+        if constraint in error_msg:
+            return message
+    return "Erreur d'intégrité : données en double ou conflit de contrainte."
 
 
 # ─── Warmup IA au démarrage ─────────────────────────────────────────────────
@@ -338,6 +359,9 @@ def create_teacher(t: TeacherCreate, db: Session = Depends(get_db)):
         })
         db.commit()
         return {"status": "success"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -379,6 +403,9 @@ def update_teacher(teacher_id: int, t: TeacherCreate, db: Session = Depends(get_
         })
         db.commit()
         return {"status": "success"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         print(f"Error updating teacher: {e}")
@@ -597,6 +624,9 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
         return {"message": "Success"}
     except HTTPException as e:
         raise e
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         print(traceback.format_exc())
@@ -623,6 +653,9 @@ def update_student(student_id: str, student: StudentUpdate, db: Session = Depend
         db.execute(query, params)
         db.commit()
         return {"message": "Success"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -740,6 +773,9 @@ def create_course(course: CourseCreate, db: Session = Depends(get_db)):
         })
         db.commit()
         return {"message": "Success"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -778,6 +814,9 @@ def update_course(course_id: str, course: CourseCreate, db: Session = Depends(ge
         })
         db.commit()
         return {"status": "success"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         print(f"Error updating course: {e}")
@@ -999,7 +1038,7 @@ class StudentLogin(BaseModel):
 
 @app.post("/api/student/login")
 def student_login(credentials: StudentLogin, db: Session = Depends(get_db)):
-    query = text("SELECT id, full_name, email, student_code FROM students WHERE student_code = :code AND email = :email")
+    query = text("SELECT id, full_name, email, student_code FROM students WHERE LOWER(student_code) = LOWER(:code) AND LOWER(email) = LOWER(:email)")
     student = db.execute(query, {"code": credentials.student_code, "email": credentials.email}).fetchone()
     
     if not student:
@@ -1228,6 +1267,9 @@ def create_session(session: SessionCreate, db: Session = Depends(get_db)):
         row = result.fetchone()
         db.commit()
         return {"id": row[0]}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=get_integrity_error_detail(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e)) from e

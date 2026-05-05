@@ -36,6 +36,40 @@ function App() {
     }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('faceattend_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    
+    if (window.location.pathname.startsWith('/portal')) {
+      root.classList.remove('light', 'dark');
+      root.classList.add(theme);
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', theme === 'dark' ? '#020617' : '#f8fafc');
+      }
+    } else {
+      // Pour l'admin/prof/caméra, on s'assure que le mode sombre est actif par défaut
+      // car le design original de l'application est basé sur ce mode.
+      root.classList.remove('light');
+      root.classList.add('dark');
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', '#020617');
+      }
+    }
+  }, [theme, window.location.pathname]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   // ─── PROTECTION ANTI-MOBILE (Réseau Local) ──────────────
   // Si l'utilisateur n'est pas sur le PC central (localhost/127.0.0.1) 
@@ -75,19 +109,24 @@ function App() {
     if (!studentUser) {
       return (
         <StudentLogin
+          key={`login-${theme}`}
           onLogin={(user) => {
             localStorage.setItem('faceattend_student', JSON.stringify(user));
             setStudentUser(user);
           }}
+          theme={theme}
         />
       );
     }
     return (
       <StudentDashboard
+        key={`dash-${theme}`}
         onLogout={() => {
           localStorage.removeItem('faceattend_student');
           setStudentUser(null);
         }}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }

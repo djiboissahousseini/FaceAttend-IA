@@ -18,6 +18,8 @@ interface StudentLayoutProps {
   onLogout: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 export default function StudentLayout({
@@ -25,6 +27,8 @@ export default function StudentLayout({
   onLogout,
   activeTab,
   setActiveTab,
+  theme,
+  toggleTheme,
 }: StudentLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -35,23 +39,8 @@ export default function StudentLayout({
     { id: 'profile', label: 'Profil', icon: <User size={22} /> },
   ];
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('faceattend_theme') as 'light' | 'dark') || 'dark';
-  });
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    localStorage.setItem('faceattend_theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
   return (
-    <div className="flex flex-col h-screen bg-slate-50 dark:bg-[#020617] overflow-hidden font-sans text-slate-900 dark:text-white transition-colors duration-500">
+    <div className="flex flex-col h-screen bg-slate-50 dark:bg-[#020617] overflow-hidden font-sans transition-colors duration-500">
       {/* ─── MAIN CONTENT AREA ─── */}
       <main className="flex-1 overflow-y-auto pb-24 pt-4 px-4">
         {/* Header with menu button */}

@@ -52,9 +52,11 @@ interface StudentStats {
 interface StudentDashboardProps {
   onLogout: () => void;
   simulatedStudentId?: string;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
-export default function StudentDashboard({ onLogout, simulatedStudentId }: StudentDashboardProps) {
+export default function StudentDashboard({ onLogout, simulatedStudentId, theme, toggleTheme }: StudentDashboardProps) {
   const [student, setStudent] = useState<StudentData | null>(null);
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -730,7 +732,7 @@ export default function StudentDashboard({ onLogout, simulatedStudentId }: Stude
   };
 
   return (
-    <StudentLayout onLogout={onLogout} activeTab={activeTab} setActiveTab={setActiveTab}>
+    <StudentLayout onLogout={onLogout} activeTab={activeTab} setActiveTab={setActiveTab} theme={theme} toggleTheme={toggleTheme}>
       <div className="max-w-md mx-auto pb-20 px-4">{renderContent()}</div>
     </StudentLayout>
   );
